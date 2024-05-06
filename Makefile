@@ -64,3 +64,4 @@ $(STRATS_LG_BMP) &: img/stratagems_large.aseprite
 		--split-layers \
 		--filename-format 'img/bmp/{layer}_{title}.bmp' \
 		$< --save-as large
+	touch $(STRATS_LG_BMP)

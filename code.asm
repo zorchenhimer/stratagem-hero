@@ -45,17 +45,37 @@ TmpY: .res 1
 TmpZ: .res 1
 
 StratBuffer: .res 8
+PressedCount: .res 1
 ArrowCount: .res 1
 IconSize: .res 1
 StratId: .res 1
 StratPalette: .res 1
 StratName: .res 31
+ErrorCountdown: .res 1
+
+AnimCounter: .res 1
+AnimCountdown: .res 1
+AttrBuffer: .res 6
+
+Controller: .res 1
+Controller_Old: .res 1
+Controller_Pressed: .res 1
+ErrorIRQ: .res 1
+
+UpdateName: .res 1
+
+DrawName: .res 1
+IRQScroll: .res 1
 
 .segment "OAM"
 
 Sprites: .res 256
 
 .segment "MAINRAM"
+
+ArrowBufferA: .res 23
+ArrowBufferB: .res 23
+;ArrowBufferC: .res 23
 
 .segment "PAGE00"
 
@@ -66,11 +86,65 @@ Yellow
 Green
 .endenum
 
+ArrowStarts:
+    .byte 0
+    ; ____D___
+    .byte 4
+    ; ___DD___
+    .byte 3
+    ; ___DDD__
+    .byte 3
+    ; __DDDD__
+    .byte 2
+    ; __DDDDD_
+    .byte 2
+    ; _DDDDDD_
+    .byte 1
+    ; _DDDDDDD
+    .byte 1
+    ; DDDDDDDD
+    .byte 0
+
+ArrowAttrStart = $23E9
+ArrowAttrOffsets:
+    .byte 0, 0
+    .byte 1, 0
+    .byte 1, 2
+    .byte 2, 0
+
+    .byte 3, 0
+    .byte 4, 0
+    .byte 4, 5
+    .byte 5, 0
+
+;ArrowAttrOffsets:
+;    .byte 1, 0
+;    .byte 2, 0
+;    .byte 2, 3
+;    .byte 3, 0
+;
+;    .byte 4, 0
+;    .byte 5, 0
+;    .byte 5, 6
+;    .byte 6, 0
+
+ArrowAttrMasks:
+    ; BR, BL, TR, TL
+    .byte %0000_1111, %0000_0000
+    .byte %0000_0011, %0000_0000
+    .byte %0000_1100, %0000_0011
+    .byte %0000_1100, %0000_0000
+
+    .byte %0000_1111, %0000_0000
+    .byte %0000_0011, %0000_0000
+    .byte %0000_1100, %0000_0011
+    .byte %0000_1100, %0000_0000
+
 StratPalettes:
     ; blue
     .byte $0F, $11, $20, $28
     ; red
-    .byte $0F, $15, $20, $28
+    .byte $0F, $16, $20, $28
     ; yellow
     .byte $0F, $27, $20, $28
     ; green
@@ -100,8 +174,8 @@ ArrowTiles:
 
     ; empty
 :   .repeat 4, i
-        ;.byte $40
-        .byte $37
+        .byte $38
+        ;.byte $3C
     .endrepeat
 
     ; up
@@ -126,8 +200,8 @@ ArrowTiles:
 
 Palettes:
     .byte $0F, $10, $20, $00
-    .byte $0F, $10, $20, $00
-    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $28, $00
+    .byte $0F, $10, $16, $00
     .byte $0F, $10, $20, $00
 
     .byte $0F, $10, $20, $00
@@ -143,23 +217,9 @@ orbital_precision
 
 ; the documentation lies.  .pushcharmap and .popcharmap throw errors
 ;.pushcharmap
-;.charmap ' ', 0
-;.charmap 'u', 1
-;.charmap 'd', 2
-;.charmap 'l', 3
-;.charmap 'r', 4
 
 StratTable:
 .include "strats.i"
-
-;StratCodes:
-;    .word :+
-;    .word :++
-;    .word :+++
-;
-;:   .byte " urdddd "
-;:   .byte "duldurdu"
-;:   .byte "   rru  "
 
 ;.popcharmap
 .repeat $FF, i
@@ -187,9 +247,9 @@ InitGame:
 
     jsr ClearSprites
 
-    lda #$40
+    lda #$38
     jsr FillNT0
-    lda #$40
+    lda #$38
     jsr FillNT1
 
     lda #.hibyte(StratStartAddr)
@@ -205,16 +265,51 @@ InitGame:
     lda #0
     jsr DrawIcon
 
-    lda #$22
+    lda #.hibyte(StratStartAddr+$400)
+    sta ptrPpuAddress+1
+    lda #.lobyte(StratStartAddr+$400)
+    sta ptrPpuAddress+0
+    lda #.lobyte(Strat_LgIconAddr)
+    sta ptrTable+0
+    lda #.hibyte(Strat_LgIconAddr)
+    sta ptrTable+1
+    lda #8
+    sta IconSize
+    lda #0
+    jsr DrawIcon
+
+    ; Main screen
+    lda #.hibyte(NameStartAddr-1-32)
     sta $2006
-    lda #$2F
+    lda #.lobyte(NameStartAddr-1-32)
     sta $2006
-    lda #$80
+    jsr DrawTextBackground
+
+    ; Draw ERROR on second nametable
+    lda #.hibyte(NameStartAddr-1-32+$400)
+    sta $2006
+    lda #.lobyte(NameStartAddr-1-32+$400)
+    sta $2006
+    jsr DrawTextBackground
+
+    lda #$26
+    sta $2006
+    lda #$2E
+    sta $2006
+
+    lda ErrorText+0
     sta $2007
+    lda ErrorText+1
+    sta $2007
+    lda ErrorText+2
+    sta $2007
+    lda ErrorText+3
+    sta $2007
+    lda ErrorText+4
     sta $2007
 
     ;lda #2
-    lda #1
+    lda #0
     jsr LoadStrat
 
     lda #$88
@@ -223,6 +318,9 @@ InitGame:
     lda #%0001_1110
     sta $2001
 
+    lda #60
+    sta AnimCountdown
+
 Frame:
     lda #150
     sta $5203
@@ -230,8 +328,196 @@ Frame:
     sta $5204
     cli
 
+    lda ErrorCountdown
+    beq :+
+    jmp ErrorFrame
+:
+
+    jsr ReadControllers
+
+    ldx PressedCount
+    lda StratBuffer, x
+    sta TmpX
+
+    lda #BUTTON_UP  ; 1
+    and Controller_Pressed
+    beq :+
+    lda #ARROW_UP
+    jmp @compare
+:
+
+    lda #BUTTON_DOWN  ; 1
+    and Controller_Pressed
+    beq :+
+    lda #ARROW_DOWN
+    jmp @compare
+:
+
+    lda #BUTTON_LEFT  ; 1
+    and Controller_Pressed
+    beq :+
+    lda #ARROW_LEFT
+    jmp @compare
+:
+
+    lda #BUTTON_RIGHT  ; 1
+    and Controller_Pressed
+    beq :+
+    lda #ARROW_RIGHT
+    jmp @compare
+:
+
+    ; nothing pressed
+    jmp @nextFrame
+
+@compare:
+    cmp TmpX
+    beq @goodPress
+;@badPress:
+
+    lda #60
+    sta ErrorCountdown
+
+    jmp @nextFrame
+@goodPress:
+    ldx ArrowCount
+    lda ArrowStarts, x
+    clc
+    adc PressedCount
+    asl a
+    tax
+
+    ldy ArrowAttrOffsets, x ;index into buffer
+    lda #%0101_0101
+    and ArrowAttrMasks, x
+    ora AttrBuffer, y ; doesn't really do anything right now.
+    sta AttrBuffer, y
+
+    inx
+    iny
+    lda #%0101_0101
+    and ArrowAttrMasks, x
+    ora AttrBuffer, y ; doesn't really do anything right now.
+    sta AttrBuffer, y
+
+    inc PressedCount
+    lda PressedCount
+    cmp ArrowCount
+    bne @nextFrame
+    ; TODO: done with current?
+    jsr WaitForNMI
+    jmp NextStrat
+
+@nextFrame:
+    jsr WaitForNMI
+
+    jmp Frame
+
+NextStrat:
+    inc StratId
+    lda StratId
+    jsr LoadStrat
+
+    jmp Frame
+
+ErrorFrame:
+    lda #0
+    ldx #0
+:
+    sta AttrBuffer, x
+    inx
+    cpx #.sizeof(AttrBuffer)
+    bne :-
+
+    dec ErrorCountdown
+    beq @clearError
+
+    ldx ArrowCount
+    lda ArrowStarts, x
+    clc
+    adc PressedCount
+    asl a
+    tax
+
+:
+    ldy ArrowAttrOffsets, x ;index into buffer
+    lda #%1010_1010
+    and ArrowAttrMasks, x
+    ora AttrBuffer, y ; doesn't really do anything right now.
+    sta AttrBuffer, y
+
+    inx
+    iny
+    lda #%1010_1010
+    and ArrowAttrMasks, x
+    ora AttrBuffer, y ; doesn't really do anything right now.
+    sta AttrBuffer, y
+
+    dex
+    dex
+    dex
+    bpl :-
+
+    lda #1
+    sta ErrorIRQ
+
+    lda #130
+    sta $5203
+    lda #$80
+    sta $5204
+    cli
+
     jsr WaitForNMI
     jmp Frame
+
+@clearError:
+    lda #0
+    sta PressedCount
+
+    jsr WaitForNMI
+    jmp Frame
+
+AnimateArrows:
+    ;dec AnimCountdown
+    ;bne @noAnim
+    ;lda #60
+    ;sta AnimCountdown
+
+    ldy #0
+    lda #0
+:
+    sta AttrBuffer, y
+    iny
+    cpy #.sizeof(AttrBuffer)
+    bne :-
+
+    lda AnimCounter
+    asl a
+    tax ; offset
+
+    ldy ArrowAttrOffsets, x ;index into buffer
+
+    lda #%0101_0101
+    and ArrowAttrMasks, x
+    ora AttrBuffer, y ; doesn't really do anything right now.
+    sta AttrBuffer, y
+
+    inx
+    iny
+    lda #%0101_0101
+    and ArrowAttrMasks, x
+    ora AttrBuffer, y ; doesn't really do anything right now.
+    sta AttrBuffer, y
+
+    ldx AnimCounter
+    inx
+    cpx #8
+    bne :+
+    ldx #0
+:
+    stx AnimCounter
+;@noAnim:
+    rts
 
 ; Strat ID in A
 LoadStrat:
@@ -243,16 +529,26 @@ LoadStrat:
     lda StratTable+1, y
     sta Pointer3+1
 
+    lda #0
+    sta PressedCount
+    ldy #.sizeof(AttrBuffer)-1
+:
+    sta AttrBuffer, y
+    dey
+    bpl :-
+
     ldy #0
     lda (Pointer3), y
     sta StratPalette
     iny
+
 
 ; Load arrow code into RAM
     ldx #0
     stx ArrowCount
 @loop:
     lda (Pointer3), y
+    ;cpx #ARROW_NONE
     beq @next
 
     inc ArrowCount
@@ -294,35 +590,18 @@ LoadStrat:
     cpx #31
     bne :-
 
-    lda #.hibyte(NameStartAddr-1-32)
-    sta $2006
-    lda #.lobyte(NameStartAddr-1-32)
-    sta $2006
-
-    lda #$39
-    ldy #32
-:   sta $2007
-    dey
-    bne :-
-
-    lda #$37
-    sta $2007
-
-    ldy #0
-@namedraw:
-    lda StratName, y
-    sta $2007
-    iny
-    cpy #31
-    bne @namedraw
-
-    lda #$3A
-    ldy #32
-:   sta $2007
-    dey
-    bne :-
-
     ; draw all the arrows
+
+    ; clear buffer
+    ldx #.sizeof(ArrowBufferA)-1
+    lda #$38
+:
+    sta ArrowBufferA, x
+    sta ArrowBufferB, x
+    ;sta ArrowBufferC, x
+    dex
+    bpl :-
+
     ; ArrowStartAddr -> Pointer4
     lda #.hibyte(ArrowStartAddr)
     sta Pointer4+1
@@ -338,31 +617,68 @@ LoadStrat:
     lda #ArrowSize
     sta IconSize
 
-    lda #1 ; arrow number
+    lda #1 ; offset into data
     sta TmpY
+    ;lda #0
+    ;sta TmpX ; index into buffer
+    ldx #0
 @arrowLoop:
-    lda Pointer4+0
-    sta ptrPpuAddress+0
-    lda Pointer4+1
-    sta ptrPpuAddress+1
-
     ldy TmpY
     lda (Pointer3), y
-    jsr DrawIcon
+    ;jsr DrawIcon
+    asl a
+    tay
 
-    clc
-    lda Pointer4+0
-    ;adc #ArrowSize
-    ;adc #4
-    adc #3
-    sta Pointer4+0
-    bcc :+
-    inc Pointer4+1
-:
+    lda ArrowTiles, y
+    sta ptrData+0
+    lda ArrowTiles+1, y
+    sta ptrData+1
+    ldy #0
+
+    ; top row
+    lda (ptrData), y
+    sta ArrowBufferA, x
+    iny
+    lda (ptrData), y
+    sta ArrowBufferA+1, x
+
+    ; bottom row
+    iny
+    lda (ptrData), y
+    sta ArrowBufferB, x
+    iny
+    lda (ptrData), y
+    sta ArrowBufferB+1, x
+
+    inx
+    inx
+    inx
+
     inc TmpY
     lda TmpY
     cmp #9
     bne @arrowLoop
+    rts
+
+DrawTextBackground:
+    lda #$39
+    ldy #32
+:   sta $2007
+    dey
+    bne :-
+
+    lda #$37
+    ldy #32
+:   sta $2007
+    dey
+    bne :-
+
+    lda #$3A
+    ldy #32
+:   sta $2007
+    dey
+    bne :-
+
     rts
 
 DrawIcon:
@@ -420,13 +736,18 @@ LoadFullPalette:
 .segment "PRGINIT"
 NMI:
     pha
+    txa
+    pha
+    tya
+    pha
+
     lda #$FF
     sta Sleeping
 
-    lda #.lobyte(Sprites)
-    sta $2003
-    lda #.hibyte(Sprites)
-    sta $4014
+    ;lda #.lobyte(Sprites)
+    ;sta $2003
+    ;lda #.hibyte(Sprites)
+    ;sta $4014
 
     lda StratPalette
     asl a
@@ -443,33 +764,127 @@ NMI:
     sta $2007
     lda StratPalettes+2, x
     sta $2007
+
+    lda ErrorCountdown
+    bne :+
     lda StratPalettes+3, x
     sta $2007
+    jmp :++
+:
+    lda #$16
+    sta $2007
+:
 
-    lda #$88
-    sta $2000
+    lda #.hibyte(ArrowAttrStart)
+    sta $2006
+    lda #.lobyte(ArrowAttrStart)
+    sta $2006
 
-    lda #%0001_1110
-    sta $2001
+    ldx #0
+:
+    lda AttrBuffer, x
+    sta $2007
+    inx
+    cpx #.sizeof(AttrBuffer)
+    bne :-
 
-    lda #0
-    sta $2005
-    sta $2005
+    jsr NMI_DrawName
+    jsr NMI_DrawArrows
 
-    pla
-    rti
-
-IRQ:
-    bit $5204
+    ldx StratId
+    inx
+    stx $5121
 
     lda ArrowCount
     and #$01
     bne :+
-    lda #8
+    lda #0 ; even
     jmp :++
 :
-    lda #0
+    ;lda #8 ; odd
+    lda #16 ; odd
 :
+    sta IRQScroll
+
+    lda #$88
+    sta $2000
+
+    lda #0
+    sta $2005
+    sta $2005
+
+@nmiDone:
+
+    lda #%0001_1110
+    sta $2001
+
+    pla
+    tay
+    pla
+    tax
+    pla
+    rti
+
+NMI_DrawName:
+    lda #.hibyte(NameStartAddr)
+    sta $2006
+    lda #.lobyte(NameStartAddr)
+    sta $2006
+
+.repeat 31, i
+    lda StratName+i
+    sta $2007
+.endrepeat
+    rts
+
+NMI_DrawArrows:
+    lda #.hibyte(ArrowStartAddr)
+    sta $2006
+    lda #.lobyte(ArrowStartAddr)
+    sta $2006
+
+.repeat .sizeof(ArrowBufferA), i
+    lda ArrowBufferA+i
+    sta $2007
+.endrepeat
+
+    lda #.hibyte(ArrowStartAddr+32)
+    sta $2006
+    lda #.lobyte(ArrowStartAddr+32)
+    sta $2006
+
+.repeat .sizeof(ArrowBufferB), i
+    lda ArrowBufferB+i
+    sta $2007
+.endrepeat
+    rts
+
+IRQ:
+    bit $5204
+
+    lda ErrorIRQ
+    beq @noError
+
+    lda #0
+    sta ErrorIRQ
+
+    lda #$89
+    sta $2000
+
+    lda #0
+    sta $2005
+    sta $2005
+
+    lda #150
+    sta $5203
+    lda #$80
+    sta $5204
+    rti
+
+@noError:
+    lda #$88
+    sta $2000
+    lda IRQScroll
     sta $2005
     lda #0
     sta $2005
@@ -619,4 +1034,58 @@ FillNT:
     dey
     bne :--
 
+    rts
+
+ReadControllers:
+    lda Controller
+    sta Controller_Old
+
+    ; Freeze input
+    lda #1
+    sta $4016
+    lda #0
+    sta $4016
+    ;sta Controller
+
+    ldx #$08
+@player1:
+    lda $4016
+    lsr A           ; Bit0 -> Carry
+    rol Controller  ; Bit0 <- Carry
+    dex
+    bne @player1
+
+    ;lda Controller
+    ;eor Controller_Old
+
+    lda Controller_Old  ; 0001
+    eor #$FF            ; 1110
+    and Controller      ; 0000
+    sta Controller_Pressed ; 0000
+    rts
+
+; Was a button pressed this frame?
+ButtonPressed:
+    sta TmpX
+    and Controller
+    sta TmpY
+
+    lda Controller_Old
+    and TmpX
+
+    cmp TmpY
+    bne btnPress_stb
+
+    ; no button change
+    rts
+
+btnPress_stb:
+    ; button released
+    lda TmpY
+    bne btnPress_stc
+    rts
+
+btnPress_stc:
+    ; button pressed
+    lda #1
     rts

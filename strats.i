@@ -62,24 +62,34 @@
     .word :++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     .word :+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-.charmap '_', 0
-.charmap 'U', 1
-.charmap 'D', 2
-.charmap 'L', 3
-.charmap 'R', 4
+ARROW_UP    = 1
+ARROW_DOWN  = 2
+ARROW_LEFT  = 3
+ARROW_RIGHT = 4
 
-charnum .set 5
+;ARROW_UP    = 3
+;ARROW_DOWN  = 2
+;ARROW_LEFT  = 1
+;ARROW_RIGHT = 0
+
+.charmap '_', 0
+.charmap 'U', ARROW_UP
+.charmap 'D', ARROW_DOWN
+.charmap 'L', ARROW_LEFT
+.charmap 'R', ARROW_RIGHT
+
+;charnum .set 5
 .repeat 10, i
     .charmap i+$30, i+$10
-    endnum .set (i+charnum)
-    .out .sprintf("charmap %02X, %02X", i+$30, (i+charnum))
+    ;endnum .set (i+charnum)
+    ;.out .sprintf("charmap %02X, %02X", i+$30, (i+charnum))
 .endrepeat
 
-charnum .set charnum
+;charnum .set charnum
 .repeat 26, i
     .charmap i+$61, i+$1A
-    .out .sprintf("charmap %02X, %02X", i+$61, (i+$0F))
-    endnum .set (i+charnum)
+    ;.out .sprintf("charmap %02X, %02X", i+$61, (i+$0F))
+    ;endnum .set (i+charnum)
 .endrepeat
 
 .charmap '-', $34
@@ -87,8 +97,11 @@ charnum .set charnum
 .charmap '"', $36
 .charmap ' ', $37
 
-.out .sprintf("charnum: %d", charnum)
-.out .sprintf("endnum: %d", endnum)
+;.out .sprintf("charnum: %d", charnum)
+;.out .sprintf("endnum: %d", endnum)
+
+ErrorText:
+    .byte "error"
 
 :   .byte StratPal::Blue
     .byte "__DLDUR_"
