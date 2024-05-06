@@ -76,3 +76,4 @@ $(STRATS_LG_BMP) &: img/stratagems_large.aseprite
 		--filename-format 'img/bmp/{layer}_{title}.bmp' \
 		$< --save-as large
 	touch $(STRATS_LG_BMP)
+	-rm img/bmp/done_large.bmp img/bmp/Background_large.bmp

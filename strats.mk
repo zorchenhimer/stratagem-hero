@@ -16,4 +16,10 @@ STRATS=\
 	   13-120mm \
 	   14-380mm \
 	   15-walking-barrage \
+	   16-orbital-laser \
+	   17-orbital-railgun \
+	   18-eagle-strafing \
+	   19-eagle-airstrike \
+	   20-eagle-clusterbomb \
+	   21-eagle-napalm \
 	   29-emplacement
