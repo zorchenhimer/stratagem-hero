@@ -27,7 +27,12 @@ all: bin/ bin/$(NAME).nes
 
 images: $(CHRLIST)
 debug:
-	echo $(STRATS_LG_CHR)
+	echo henlo
+
+cleanall: clean clean-images
+
+clean:
+	-rm bin/* chr.i
 
 clean-images:
 	-rm img/bmp/*.bmp img/chr/*.chr
@@ -38,7 +43,7 @@ bin/:
 bin/$(NAME).nes: bin/code.o bin/chr.o
 	ld65 $(LDFLAGS) -o $@ $^
 
-bin/chr.o: $(CHRLIST)
+bin/chr.o: $(CHRLIST) chr.i
 bin/code.o: strats.inc
 bin/%.o: %.asm
 	ca65 $(CAFLAGS) -o $@ $<
@@ -58,6 +63,12 @@ $(ARROWS_BMP) &: img/arrows_16.aseprite
 #		--split-layers \
 #		--filename-format 'img/bmp/{title}-{layer}.bmp' \
 #		$< --save-as base
+
+chr.i: $(STRATS_LG_BMP)
+	truncate -s 0 chr.i
+	for i in $(STRATS_LG_CHR) ; do \
+		echo .incbin \"$$i\" >> chr.i; \
+	done
 
 $(STRATS_LG_BMP) &: img/stratagems_large.aseprite
 	aseprite -b \
