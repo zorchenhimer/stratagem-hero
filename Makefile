@@ -39,7 +39,7 @@ bin/$(NAME).nes: bin/code.o bin/chr.o
 	ld65 $(LDFLAGS) -o $@ $^
 
 bin/chr.o: $(CHRLIST)
-bin/code.o: strats.i
+bin/code.o: strats.inc
 bin/%.o: %.asm
 	ca65 $(CAFLAGS) -o $@ $<
 

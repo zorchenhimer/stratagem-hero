@@ -219,7 +219,7 @@ orbital_precision
 ;.pushcharmap
 
 StratTable:
-.include "strats.i"
+.include "strats.inc"
 
 ;.popcharmap
 .repeat $FF, i
