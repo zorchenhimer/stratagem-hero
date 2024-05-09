@@ -1,3 +1,6 @@
+; asmsyntax=ca65
+
+StratTable:
     .word :+
     .word :++
     .word :+++
@@ -61,6 +64,10 @@
     .word :+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     .word :++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     .word :+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+STRAT_COUNT = (* - StratTable) / 2
+
+.out .sprintf("Strat count: %d", STRAT_COUNT)
 
 ARROW_UP    = 1
 ARROW_DOWN  = 2
@@ -259,6 +266,7 @@ ErrorText:
     .byte "_DULURR_"
     .byte "ax/las-5 ", '"', "guard dog", '"', " rover", $00
 
+SheildBackpack:
 :   .byte StratPal::Blue
     .byte "_DLDDUL_"
     .asciiz "sh-20 ballistic shield backpack"
@@ -272,7 +280,7 @@ ErrorText:
     .asciiz "las-99 quasar cannon"
 
 :   .byte StratPal::Blue
-    .byte "__DULRLR_"
+    .byte "_DULRLR_"
     .asciiz "sh-32 shield generator pack"
 
 :   .byte StratPal::Green

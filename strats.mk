@@ -22,4 +22,44 @@ STRATS=\
 	   19-eagle-airstrike \
 	   20-eagle-clusterbomb \
 	   21-eagle-napalm \
-	   29-emplacement
+	   22-jump-pack \
+	   23-eagle-smoke \
+	   24-eagle-110 \
+	   25-eagle-500 \
+	   26-orbital-precision \
+	   27-orbital-gas \
+	   28-orbital-ems \
+	   29-orbital-smoke \
+	   30-emplacement \
+	   31-shield-gen \
+	   32-tesla-tower \
+	   33-mines \
+	   34-supply-pack \
+	   35-grenade-launcher \
+	   36-laser-cannon \
+	   37-fire-mines \
+	   38-guard-dog-rover \
+	   39-ballistic-shield \
+	   40-arc-thrower \
+	   41-quasar-cannon \
+	   42-shield-pack \
+	   43-mg-turret \
+	   44-gatling-turret \
+	   45-mortar \
+	   46-guard-dog \
+	   47-autocannon-turret \
+	   48-rocket-turret \
+	   49-ems-mortar \
+	   50-patriot \
+	   51-reinforce \
+	   52-sos \
+	   53-resupply \
+	   54-eagle-rearm \
+	   55-ssd-delivery \
+	   56-prospecting-drill \
+	   57-flag \
+	   58-hellbomb \
+	   59-upload-data \
+	   60-seismic-probe \
+	   61-illumination \
+	   62-seaf

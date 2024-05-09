@@ -146,7 +146,7 @@ StratPalettes:
     ; red
     .byte $0F, $16, $20, $28
     ; yellow
-    .byte $0F, $27, $20, $28
+    .byte $0F, $28, $20, $28
     ; green
     .byte $0F, $19, $20, $28
 
@@ -218,7 +218,6 @@ orbital_precision
 ; the documentation lies.  .pushcharmap and .popcharmap throw errors
 ;.pushcharmap
 
-StratTable:
 .include "strats.inc"
 
 ;.popcharmap
@@ -335,6 +334,18 @@ Frame:
 
     jsr ReadControllers
 
+    lda #BUTTON_A
+    and Controller_Pressed
+    beq :+
+    jmp NextStrat
+:
+
+    lda #BUTTON_B
+    and Controller_Pressed
+    beq :+
+    jmp PrevStrat
+:
+
     ldx PressedCount
     lda StratBuffer, x
     sta TmpX
@@ -413,9 +424,23 @@ Frame:
 
     jmp Frame
 
+PrevStrat:
+    dec StratId
+    lda StratId
+    cmp #$FF
+    bne :+
+    lda #STRAT_COUNT-1
+    sta StratId
+    jmp :+
+
 NextStrat:
     inc StratId
-    lda StratId
+:   lda StratId
+    cmp #STRAT_COUNT
+    bcc :+
+    lda #0
+    sta StratId
+:
     jsr LoadStrat
 
     jmp Frame
@@ -582,13 +607,12 @@ LoadStrat:
 @namedone:
 
     lda #$37
-    cpx #32
-    beq :+
+    jmp :++
 :
     sta StratName, x
     inx
-    cpx #31
-    bne :-
+:   cpx #31
+    bne :--
 
     ; draw all the arrows
 
