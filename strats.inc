@@ -87,22 +87,22 @@ ARROW_RIGHT = 4
 
 ;charnum .set 5
 .repeat 10, i
-    .charmap i+$30, i+$10
+    .charmap i+$30, i+$90
     ;endnum .set (i+charnum)
     ;.out .sprintf("charmap %02X, %02X", i+$30, (i+charnum))
 .endrepeat
 
 ;charnum .set charnum
 .repeat 26, i
-    .charmap i+$61, i+$1A
+    .charmap i+$61, i+$9A
     ;.out .sprintf("charmap %02X, %02X", i+$61, (i+$0F))
     ;endnum .set (i+charnum)
 .endrepeat
 
-.charmap '-', $34
-.charmap '/', $35
-.charmap '"', $36
-.charmap ' ', $37
+.charmap '-', $B4
+.charmap '/', $B5
+.charmap '"', $B6
+.charmap ' ', $B7
 
 ;.out .sprintf("charnum: %d", charnum)
 ;.out .sprintf("endnum: %d", endnum)
@@ -266,7 +266,6 @@ ErrorText:
     .byte "_DULURR_"
     .byte "ax/las-5 ", '"', "guard dog", '"', " rover", $00
 
-SheildBackpack:
 :   .byte StratPal::Blue
     .byte "_DLDDUL_"
     .asciiz "sh-20 ballistic shield backpack"

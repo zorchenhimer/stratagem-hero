@@ -3,7 +3,7 @@
 .include "nes2header.inc"
 nes2mapper 5
 nes2prg 32 * 1024  ; 32k PRG
-nes2chr 32 * 1024  ; 32k CHR
+nes2chr 32 * 8 * 1024  ; 32k CHR
 nes2chrram 0
 nes2wram 0
 nes2mirror 'V'
@@ -86,6 +86,8 @@ Yellow
 Green
 .endenum
 
+.include "strats.inc"
+
 ArrowStarts:
     .byte 0
     ; ____D___
@@ -105,7 +107,6 @@ ArrowStarts:
     ; DDDDDDDD
     .byte 0
 
-ArrowAttrStart = $23E9
 ArrowAttrOffsets:
     .byte 0, 0
     .byte 1, 0
@@ -140,6 +141,17 @@ ArrowAttrMasks:
     .byte %0000_1100, %0000_0011
     .byte %0000_1100, %0000_0000
 
+Palettes:
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $28, $20
+    .byte $0F, $11, $20, $28
+    .byte $0F, $19, $20, $16
+
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $20, $00
+
 StratPalettes:
     ; blue
     .byte $0F, $11, $20, $28
@@ -153,9 +165,12 @@ StratPalettes:
 ArrowSize = 2
 ;ArrowStartAddr = $2288
 ArrowStartAddr = $2285
+ArrowAttrStart = $23E9
 
-StratStartAddr = $2104
+StratStartAddr = $2102
 NameStartAddr = $2221
+
+SM_STRAT_START= $218A
 
 .enum Arrow
 Empty = 0
@@ -180,34 +195,23 @@ ArrowTiles:
 
     ; up
 :   .repeat 4, i
-        .byte i+(4*0)
+        .byte i+(4*0)+$80
     .endrepeat
 
     ; down
 :   .repeat 4, i
-        .byte i+(4*1)
+        .byte i+(4*1)+$80
     .endrepeat
 
     ; left
 :   .repeat 4, i
-        .byte i+(4*2)
+        .byte i+(4*2)+$80
     .endrepeat
 
     ; right
 :   .repeat 4, i
-        .byte i+(4*3)
+        .byte i+(4*3)+$80
     .endrepeat
-
-Palettes:
-    .byte $0F, $10, $20, $00
-    .byte $0F, $10, $28, $00
-    .byte $0F, $10, $16, $00
-    .byte $0F, $10, $20, $00
-
-    .byte $0F, $10, $20, $00
-    .byte $0F, $10, $20, $00
-    .byte $0F, $10, $20, $00
-    .byte $0F, $10, $20, $00
 
 .enum Strats
 eagle500k = 0
@@ -218,12 +222,10 @@ orbital_precision
 ; the documentation lies.  .pushcharmap and .popcharmap throw errors
 ;.pushcharmap
 
-.include "strats.inc"
-
 ;.popcharmap
-.repeat $FF, i
-    .charmap i, i
-.endrepeat
+;.repeat $FF, i
+;    .charmap i, i
+;.endrepeat
 
 ; So we can just use the DrawIcon routine
 Strat_LgIconAddr:
@@ -234,8 +236,116 @@ Strat_LgIconAddr:
 ; same CHR ids.
 Strat_LgIcon:
     .repeat 64, i
-        .byte i+(64*0)+$40
+        .byte i
     .endrepeat
+
+DrawSmall_16:
+    lda #$21
+    sta $2006
+    lda #$8C
+    sta $2006
+
+    ldy #$EC
+.repeat 2
+    sty $2007
+    iny
+.endrepeat
+
+    lda #$21
+    sta $2006
+    lda #$AC
+    sta $2006
+
+.repeat 2
+    sty $2007
+    iny
+.endrepeat
+    rts
+
+DrawSmall_24:
+    lda ptrPpuAddress+1
+    sta $2006
+    lda ptrPpuAddress+0
+    sta $2006
+
+    ldy #$80
+.repeat 3
+    sty $2007
+    iny
+.endrepeat
+
+    clc
+    lda ptrPpuAddress+0
+    adc #32
+    sta ptrPpuAddress+0
+    bcc :+
+    inc ptrPpuAddress+1
+:
+
+    lda ptrPpuAddress+1
+    sta $2006
+    lda ptrPpuAddress+0
+    sta $2006
+
+.repeat 3
+    sty $2007
+    iny
+.endrepeat
+
+    clc
+    lda ptrPpuAddress+0
+    adc #32
+    sta ptrPpuAddress+0
+    bcc :+
+    inc ptrPpuAddress+1
+:
+
+    lda ptrPpuAddress+1
+    sta $2006
+    lda ptrPpuAddress+0
+    sta $2006
+
+.repeat 3
+    sty $2007
+    iny
+.endrepeat
+    rts
+
+DrawSmall_32:
+    lda ptrPpuAddress+1
+    sta $2006
+    lda ptrPpuAddress+0
+    sta $2006
+
+    ldy #$40
+.repeat 4
+    sty $2007
+    iny
+.endrepeat
+
+.repeat 3
+    clc
+    lda ptrPpuAddress+0
+    adc #32
+    sta ptrPpuAddress+0
+    bcc :+
+    inc ptrPpuAddress+1
+:
+
+    lda ptrPpuAddress+1
+    sta $2006
+    lda ptrPpuAddress+0
+    sta $2006
+
+.repeat 4
+    sty $2007
+    iny
+.endrepeat
+.endrepeat
+    rts
+
+DebugText:
+    .asciiz "henlo"
 
 InitGame:
     lda #.lobyte(Palettes)
@@ -248,7 +358,7 @@ InitGame:
 
     lda #$38
     jsr FillNT0
-    lda #$38
+    lda #$39
     jsr FillNT1
 
     lda #.hibyte(StratStartAddr)
@@ -264,18 +374,18 @@ InitGame:
     lda #0
     jsr DrawIcon
 
-    lda #.hibyte(StratStartAddr+$400)
-    sta ptrPpuAddress+1
-    lda #.lobyte(StratStartAddr+$400)
-    sta ptrPpuAddress+0
-    lda #.lobyte(Strat_LgIconAddr)
-    sta ptrTable+0
-    lda #.hibyte(Strat_LgIconAddr)
-    sta ptrTable+1
-    lda #8
-    sta IconSize
-    lda #0
-    jsr DrawIcon
+    ;lda #.hibyte(StratStartAddr+$400)
+    ;sta ptrPpuAddress+1
+    ;lda #.lobyte(StratStartAddr+$400)
+    ;sta ptrPpuAddress+0
+    ;lda #.lobyte(Strat_LgIconAddr)
+    ;sta ptrTable+0
+    ;lda #.hibyte(Strat_LgIconAddr)
+    ;sta ptrTable+1
+    ;lda #8
+    ;sta IconSize
+    ;lda #0
+    ;jsr DrawIcon
 
     ; Main screen
     lda #.hibyte(NameStartAddr-1-32)
@@ -291,25 +401,145 @@ InitGame:
     sta $2006
     jsr DrawTextBackground
 
-    lda #$26
-    sta $2006
-    lda #$2E
-    sta $2006
+    ;lda #$26
+    ;sta $2006
+    ;lda #$2E
+    ;sta $2006
 
-    lda ErrorText+0
-    sta $2007
-    lda ErrorText+1
-    sta $2007
-    lda ErrorText+2
-    sta $2007
-    lda ErrorText+3
-    sta $2007
-    lda ErrorText+4
-    sta $2007
+    ;lda ErrorText+0
+    ;sta $2007
+    ;lda ErrorText+1
+    ;sta $2007
+    ;lda ErrorText+2
+    ;sta $2007
+    ;lda ErrorText+3
+    ;sta $2007
+    ;lda ErrorText+4
+    ;sta $2007
 
-    ;lda #2
     lda #0
     jsr LoadStrat
+
+    ;jsr DrawSmall_16
+    ldy #0
+
+    lda #.hibyte(SM_STRAT_START)
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START)
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+
+    lda #.hibyte(SM_STRAT_START+(4*1))
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START+(4*1))
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+
+    lda #.hibyte(SM_STRAT_START+(4*2))
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START+(4*2))
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+
+    lda #.hibyte(SM_STRAT_START+(4*3))
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START+(4*3))
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+
+    lda #.hibyte(SM_STRAT_START+(4*4))
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START+(4*4))
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+
+    lda #$20
+    sta $2006
+    lda #$26
+    sta $2006
+    ldx #0
+:   lda DebugText, x
+    beq :+
+    sta $2007
+    inx
+    jmp :-
+:
+
+    ; extended attr
+ExtAttrStart = $5C00
+    lda #%0000_0010
+    sta $5104
+
+;
+;   clear it all
+    lda #%0000_0000
+    ldx #0
+:   sta ExtAttrStart, x
+    sta ExtAttrStart+$100, x
+    sta ExtAttrStart+$200, x
+    sta ExtAttrStart+$300, x
+    inx
+    bne :-
+
+
+    lda #%0100_0001 ; "inverted" text
+    ldx #0
+:   sta ExtAttrStart, x
+    inx
+    bne :-
+
+    lda #%0000_0001
+    sta $5104
+
+    ;
+    ; small icons
+    lda #$80 | 01
+    ldx #0
+:   sta ExtAttrStart+$018A, x
+    sta ExtAttrStart+$01AA, x
+    sta ExtAttrStart+$01CA, x
+    sta ExtAttrStart+$01EA, x
+    inx
+    cpx #4
+    bne :-
+
+    lda #$C0 | 11
+    ldx #0
+:   sta ExtAttrStart+$018E, x
+    sta ExtAttrStart+$01AE, x
+    sta ExtAttrStart+$01CE, x
+    sta ExtAttrStart+$01EE, x
+    inx
+    cpx #4
+    bne :-
+
+    lda #$C0 | 30
+    ldx #0
+:   sta ExtAttrStart+$0192, x
+    sta ExtAttrStart+$01B2, x
+    sta ExtAttrStart+$01D2, x
+    sta ExtAttrStart+$01F2, x
+    inx
+    cpx #4
+    bne :-
+
+    lda #$80 | 59
+    ldx #0
+:   sta ExtAttrStart+$0196, x
+    sta ExtAttrStart+$01B6, x
+    sta ExtAttrStart+$01D6, x
+    sta ExtAttrStart+$01F6, x
+    inx
+    cpx #4
+    bne :-
+
+    lda #.hibyte(StratStartAddr+$3C00)
+    sta ptrPpuAddress+1
+    lda #.lobyte(StratStartAddr+$3C00)
+    sta ptrPpuAddress+0
+
+    lda #1
+    jsr DrawIconExt
 
     lda #$88
     sta $2000
@@ -606,7 +836,7 @@ LoadStrat:
     jmp @nameloop
 @namedone:
 
-    lda #$37
+    lda #' '
     jmp :++
 :
     sta StratName, x
@@ -685,19 +915,19 @@ LoadStrat:
     rts
 
 DrawTextBackground:
-    lda #$39
+    lda #$B9
     ldy #32
 :   sta $2007
     dey
     bne :-
 
-    lda #$37
+    lda #$B7
     ldy #32
 :   sta $2007
     dey
     bne :-
 
-    lda #$3A
+    lda #$BA
     ldy #32
 :   sta $2007
     dey
@@ -740,6 +970,31 @@ DrawIcon:
     dec TmpX
     bne @row
 
+    rts
+
+DrawIconExt:
+    sta TmpY ; strat value to store
+
+    lda IconSize
+    sta TmpX
+@row:
+    clc
+    adc #32
+    sta ptrPpuAddress+0
+    bcc :+
+    inc ptrPpuAddress+1
+:
+
+    ldx IconSize
+    ldy #0
+@column:
+    lda TmpY
+    sta (ptrPpuAddress), y
+    iny
+    dex
+    bne @column
+    dec TmpX
+    bne @row
     rts
 
 LoadFullPalette:
@@ -816,8 +1071,8 @@ NMI:
     jsr NMI_DrawArrows
 
     ldx StratId
-    inx
-    stx $5121
+    ;inx
+    stx $5123
 
     lda ArrowCount
     and #$01
@@ -841,6 +1096,8 @@ NMI:
 
     lda #%0001_1110
     sta $2001
+
+;;
 
     pla
     tay
@@ -973,19 +1230,24 @@ MMC5_Init:
     sta $5100
 
     ; CHR mode 3: 1k pages
-    lda #3
+    lda #1
     sta $5101
 
     ; Vertical mirroring
     lda #$44
     sta $5105
 
+    ; extended attr mode
+    lda #1
+    sta $5104
+
     ; initial CHR banks
     ldy #0
     sty $5120
     iny
     sty $5121
-    iny
+
+    ldy #64
     sty $5122
     iny
     sty $5123
@@ -1057,8 +1319,9 @@ FillNT:
     bne :-
     dey
     bne :--
-
     rts
+
+ClearExt:
 
 ReadControllers:
     lda Controller
