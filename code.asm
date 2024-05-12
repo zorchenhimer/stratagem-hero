@@ -609,11 +609,15 @@ Frame:
 
     clc
     ldx TimerAnim
-    lda Mult25_lo, x
+    stx $5205 ; multiply on MMC5
+    ldx #25
+    stx $5206
+
+    lda $5205
     adc #.lobyte(TimerTiles)
     sta ptrData+0
 
-    lda Mult25_hi, x
+    lda $5206
     adc #.hibyte(TimerTiles)
     sta ptrData+1
 
@@ -1203,16 +1207,6 @@ MenuBgTiles:
 
 TimerTiles:
     .include "timer.inc"
-
-Mult25_lo:
-    .repeat 200, i
-    .byte .lobyte(25 * i)
-    .endrepeat
-
-Mult25_hi:
-    .repeat 200, i
-    .byte .hibyte(25 * i)
-    .endrepeat
 
 .segment "PRGINIT"
 NMI:
