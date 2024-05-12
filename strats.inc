@@ -64,6 +64,7 @@ StratTable:
     .word :+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     .word :++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     .word :+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    .word :+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 STRAT_COUNT = (* - StratTable) / 2
 
@@ -103,6 +104,7 @@ ARROW_RIGHT = 4
 .charmap '/', $B5
 .charmap '"', $B6
 .charmap ' ', $B7
+.charmap 'M', $BD
 
 ;.out .sprintf("charnum: %d", charnum)
 ;.out .sprintf("endnum: %d", endnum)
@@ -164,11 +166,11 @@ ErrorText:
 
 :   .byte StratPal::Red
     .byte "_RRDLRD_"
-    .asciiz "orbital 120mm he barrage"
+    .asciiz "orbital 120MM he barrage"
 
 :   .byte StratPal::Red
     .byte "_LDUULDD"
-    .asciiz "orbital 380mm he barrage"
+    .asciiz "orbital 380MM he barrage"
 
 :   .byte StratPal::Red
     .byte "_RDRDRD_"
@@ -208,7 +210,7 @@ ErrorText:
 
 :   .byte StratPal::Red
     .byte "__URUL__"
-    .asciiz "eagle 110mm rocket pods"
+    .asciiz "eagle 110MM rocket pods"
 
 :   .byte StratPal::Red
     .byte "__URDDD_"

@@ -1,5 +1,16 @@
 ; asmsyntax=ca65
 
+; TODO:
+;   - Add some RNG for stratagem selection
+;   - Add rounds and scoring
+;   - Add timer
+;
+; Note:
+; DrawSmallIcon needs to be called while the
+; extended memory area is writable in extended
+; attribute mode.  Also look at DrawIconExt for
+; the same thing.
+
 .include "nes2header.inc"
 nes2mapper 5
 nes2prg 32 * 1024  ; 32k PRG
@@ -39,6 +50,8 @@ Pointer4: .res 2
 ptrPpuAddress: .res 2
 ptrData: .res 2
 ptrTable: .res 2
+ptrIRQ: .res 2
+ptrNMI: .res 2
 
 TmpX: .res 1
 TmpY: .res 1
@@ -52,6 +65,7 @@ StratId: .res 1
 StratPalette: .res 1
 StratName: .res 31
 ErrorCountdown: .res 1
+NextCountdown: .res 1   ; set when clear current
 
 AnimCounter: .res 1
 AnimCountdown: .res 1
@@ -67,14 +81,27 @@ UpdateName: .res 1
 DrawName: .res 1
 IRQScroll: .res 1
 
+; Next IRQ state
+NextIRQ: .res 1
+DisableNMI: .res 1
+ArrowColor: .res 1
+
+rng: .res 1
+
+StratsCurrent: .res 8
+StratsNext: .res 8
+StratsCompleted: .res 1
+Round: .res 2
+ClearSmallStrat: .res 1
+
 .segment "OAM"
 
 Sprites: .res 256
 
 .segment "MAINRAM"
 
-ArrowBufferA: .res 23
-ArrowBufferB: .res 23
+ArrowBufferA: .res 8
+ArrowBufferB: .res 8
 ;ArrowBufferC: .res 23
 
 .segment "PAGE00"
@@ -142,7 +169,7 @@ ArrowAttrMasks:
     .byte %0000_1100, %0000_0000
 
 Palettes:
-    .byte $0F, $10, $20, $00
+    .byte $0F, $11, $20, $28
     .byte $0F, $10, $28, $20
     .byte $0F, $11, $20, $28
     .byte $0F, $19, $20, $16
@@ -161,6 +188,12 @@ StratPalettes:
     .byte $0F, $28, $20, $28
     ; green
     .byte $0F, $19, $20, $28
+
+SmallStratPal:
+    .byte $80
+    .byte $C0
+    .byte $80
+    .byte $C0
 
 ArrowSize = 2
 ;ArrowStartAddr = $2288
@@ -189,7 +222,7 @@ ArrowTiles:
 
     ; empty
 :   .repeat 4, i
-        .byte $38
+        .byte $50+i
         ;.byte $3C
     .endrepeat
 
@@ -238,6 +271,38 @@ Strat_LgIcon:
     .repeat 64, i
         .byte i
     .endrepeat
+
+IrqStates:
+    .word irqExtAttr     ; setup extended attributes
+    .word irqErrorText   ; scroll to error text
+    .word irqArrowScroll ; scroll to center arrows
+    .word irqMenu        ; pause before starting game
+
+IrqLines:
+    .byte 10
+    .byte 130
+    .byte 150
+    .byte 10
+IrqStateCount = * - IrqLines
+
+; IRQ state index in A
+SetIRQ:
+    ;lda NextIRQ
+    tax
+    asl a
+    tay
+
+    lda IrqLines, x
+    sta $5203
+    lda #$80
+    sta $5204
+
+    lda IrqStates+0, y
+    sta ptrIRQ+0
+    lda IrqStates+1, y
+    sta ptrIRQ+1
+    cli
+    rts
 
 DrawSmall_16:
     lda #$21
@@ -348,19 +413,27 @@ DebugText:
     .asciiz "henlo"
 
 InitGame:
-    lda #.lobyte(Palettes)
-    sta Pointer1+0
-    lda #.hibyte(Palettes)
-    sta Pointer1+1
-    jsr LoadFullPalette
+    lda #$FF
+    sta DisableNMI
+
+    lda #0
+    sta $2001
+    sta ClearSmallStrat
+
+    lda #.lobyte(nmiGame)
+    sta ptrNMI+0
+    lda #.hibyte(nmiGame)
+    sta ptrNMI+1
 
     jsr ClearSprites
 
     lda #$38
     jsr FillNT0
-    lda #$39
+    lda #$38
     jsr FillNT1
 
+    ;
+    ; Draw the large strat icon tiles
     lda #.hibyte(StratStartAddr)
     sta ptrPpuAddress+1
     lda #.lobyte(StratStartAddr)
@@ -373,19 +446,6 @@ InitGame:
     sta IconSize
     lda #0
     jsr DrawIcon
-
-    ;lda #.hibyte(StratStartAddr+$400)
-    ;sta ptrPpuAddress+1
-    ;lda #.lobyte(StratStartAddr+$400)
-    ;sta ptrPpuAddress+0
-    ;lda #.lobyte(Strat_LgIconAddr)
-    ;sta ptrTable+0
-    ;lda #.hibyte(Strat_LgIconAddr)
-    ;sta ptrTable+1
-    ;lda #8
-    ;sta IconSize
-    ;lda #0
-    ;jsr DrawIcon
 
     ; Main screen
     lda #.hibyte(NameStartAddr-1-32)
@@ -401,57 +461,44 @@ InitGame:
     sta $2006
     jsr DrawTextBackground
 
-    ;lda #$26
-    ;sta $2006
-    ;lda #$2E
-    ;sta $2006
+    lda #$26
+    sta $2006
+    lda #$2E
+    sta $2006
 
-    ;lda ErrorText+0
-    ;sta $2007
-    ;lda ErrorText+1
-    ;sta $2007
-    ;lda ErrorText+2
-    ;sta $2007
-    ;lda ErrorText+3
-    ;sta $2007
-    ;lda ErrorText+4
-    ;sta $2007
-
-    lda #0
-    jsr LoadStrat
+    lda ErrorText+0
+    sta $2007
+    lda ErrorText+1
+    sta $2007
+    lda ErrorText+2
+    sta $2007
+    lda ErrorText+3
+    sta $2007
+    lda ErrorText+4
+    sta $2007
 
     ;jsr DrawSmall_16
     ldy #0
 
-    lda #.hibyte(SM_STRAT_START)
-    sta ptrPpuAddress+1
-    lda #.lobyte(SM_STRAT_START)
-    sta ptrPpuAddress+0
-    jsr DrawSmall_32
+    jsr DrawSmallStrats
 
-    lda #.hibyte(SM_STRAT_START+(4*1))
-    sta ptrPpuAddress+1
-    lda #.lobyte(SM_STRAT_START+(4*1))
-    sta ptrPpuAddress+0
-    jsr DrawSmall_32
+    ; Arrows;  they all use the same tile IDs,
+    ; just different CHR banks
+    lda #.lobyte(ArrowTiles)
+    sta ptrTable+0
+    lda #.hibyte(ArrowTiles)
+    sta ptrTable+1
 
-    lda #.hibyte(SM_STRAT_START+(4*2))
+    .repeat 8, i
+    lda #.hibyte(ArrowStartAddr+(i*3))
     sta ptrPpuAddress+1
-    lda #.lobyte(SM_STRAT_START+(4*2))
+    lda #.lobyte(ArrowStartAddr+(i*3))
     sta ptrPpuAddress+0
-    jsr DrawSmall_32
-
-    lda #.hibyte(SM_STRAT_START+(4*3))
-    sta ptrPpuAddress+1
-    lda #.lobyte(SM_STRAT_START+(4*3))
-    sta ptrPpuAddress+0
-    jsr DrawSmall_32
-
-    lda #.hibyte(SM_STRAT_START+(4*4))
-    sta ptrPpuAddress+1
-    lda #.lobyte(SM_STRAT_START+(4*4))
-    sta ptrPpuAddress+0
-    jsr DrawSmall_32
+    lda #2
+    sta IconSize
+    lda #0
+    jsr DrawIcon
+    .endrepeat
 
     lda #$20
     sta $2006
@@ -488,50 +535,8 @@ ExtAttrStart = $5C00
     inx
     bne :-
 
-    lda #%0000_0001
+    lda #%0000_0010
     sta $5104
-
-    ;
-    ; small icons
-    lda #$80 | 01
-    ldx #0
-:   sta ExtAttrStart+$018A, x
-    sta ExtAttrStart+$01AA, x
-    sta ExtAttrStart+$01CA, x
-    sta ExtAttrStart+$01EA, x
-    inx
-    cpx #4
-    bne :-
-
-    lda #$C0 | 11
-    ldx #0
-:   sta ExtAttrStart+$018E, x
-    sta ExtAttrStart+$01AE, x
-    sta ExtAttrStart+$01CE, x
-    sta ExtAttrStart+$01EE, x
-    inx
-    cpx #4
-    bne :-
-
-    lda #$C0 | 30
-    ldx #0
-:   sta ExtAttrStart+$0192, x
-    sta ExtAttrStart+$01B2, x
-    sta ExtAttrStart+$01D2, x
-    sta ExtAttrStart+$01F2, x
-    inx
-    cpx #4
-    bne :-
-
-    lda #$80 | 59
-    ldx #0
-:   sta ExtAttrStart+$0196, x
-    sta ExtAttrStart+$01B6, x
-    sta ExtAttrStart+$01D6, x
-    sta ExtAttrStart+$01F6, x
-    inx
-    cpx #4
-    bne :-
 
     lda #.hibyte(StratStartAddr+$3C00)
     sta ptrPpuAddress+1
@@ -541,21 +546,52 @@ ExtAttrStart = $5C00
     lda #1
     jsr DrawIconExt
 
-    lda #$88
+    lda rng
+    and #$3F
+    tax
+    ldy #0
+:
+    lda StratRngTable, x
+    sta StratsCurrent, y
+    inx
+    txa
+    and #$3F
+    tax
+    iny
+    cpy #8
+    bne :-
+
+    lda StratsCurrent+0
+    jsr LoadStrat
+
+    lda #%0000_0001
+    sta $5104
+
+    lda #0
+    sta DisableNMI
+
+    lda #$80
     sta $2000
 
-    lda #%0001_1110
+    lda #0
+    sta Sleeping
+    jsr WaitForNMI
+
+    ; turn off sprites
+    lda #%0000_1110
     sta $2001
 
     lda #60
     sta AnimCountdown
 
 Frame:
-    lda #150
-    sta $5203
-    lda #$80
-    sta $5204
-    cli
+    lda #0
+    jsr SetIRQ
+
+    lda NextCountdown
+    beq :+
+    jmp ClearStratFrame
+:
 
     lda ErrorCountdown
     beq :+
@@ -568,12 +604,6 @@ Frame:
     and Controller_Pressed
     beq :+
     jmp NextStrat
-:
-
-    lda #BUTTON_B
-    and Controller_Pressed
-    beq :+
-    jmp PrevStrat
 :
 
     ldx PressedCount
@@ -646,81 +676,130 @@ Frame:
     cmp ArrowCount
     bne @nextFrame
     ; TODO: done with current?
+    lda #15
+    sta NextCountdown
     jsr WaitForNMI
-    jmp NextStrat
+    jmp Frame
 
 @nextFrame:
     jsr WaitForNMI
 
     jmp Frame
 
-PrevStrat:
-    dec StratId
-    lda StratId
-    cmp #$FF
-    bne :+
-    lda #STRAT_COUNT-1
-    sta StratId
-    jmp :+
-
 NextStrat:
-    inc StratId
-:   lda StratId
-    cmp #STRAT_COUNT
-    bcc :+
-    lda #0
-    sta StratId
-:
-    jsr LoadStrat
+    lda rng
+    and #$3F
+    ldx StratsCompleted
+    sta StratsNext, x
 
-    jmp Frame
+    sec
+    lda #6
+    sbc StratsCompleted
+    sta ClearSmallStrat
 
-ErrorFrame:
     lda #0
-    ldx #0
+    jsr SetIRQ
+    jsr WaitForNMI
+
+    ldy #0
 :
-    sta AttrBuffer, x
-    inx
-    cpx #.sizeof(AttrBuffer)
+    lda StratsCurrent+1, y
+    sta StratsCurrent, y
+    iny
+    cpy #5
     bne :-
 
-    dec ErrorCountdown
-    beq @clearError
+    lda #$FF
+    sta StratsCurrent+5
 
-    ldx ArrowCount
-    lda ArrowStarts, x
-    clc
-    adc PressedCount
-    asl a
-    tax
-
+    inc StratsCompleted
+    lda StratsCompleted
+    cmp #6
+    bne :+
+    jmp NextRound
 :
-    ldy ArrowAttrOffsets, x ;index into buffer
-    lda #%1010_1010
-    and ArrowAttrMasks, x
-    ora AttrBuffer, y ; doesn't really do anything right now.
-    sta AttrBuffer, y
 
-    inx
-    iny
-    lda #%1010_1010
-    and ArrowAttrMasks, x
-    ora AttrBuffer, y ; doesn't really do anything right now.
-    sta AttrBuffer, y
+    lda StratsCurrent+0
+    jsr LoadStrat
 
-    dex
-    dex
+    jsr WaitForNMI
+    jmp Frame
+
+NextRound:
+    ldx #5
+:
+    lda StratsNext, x
+    sta StratsCurrent, x
     dex
     bpl :-
 
-    lda #1
-    sta ErrorIRQ
+    lda StratsCurrent+0
+    jsr LoadStrat
 
-    lda #130
-    sta $5203
+    lda #0
+    sta StratsCompleted
+
+    ; TODO: mid-round screen
+    jsr WaitForNMI
+
+    jsr DrawSmallStrats
     lda #$80
-    sta $5204
-    cli
+    sta $2000
+
+    lda #0
+    sta $2005
+    sta $2005
+
+    jmp Frame
+
+DrawSmallStrats:
+    lda #.hibyte(SM_STRAT_START)
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START)
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+
+    lda #.hibyte(SM_STRAT_START+(4*1))
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START+(4*1))
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+
+    lda #.hibyte(SM_STRAT_START+(4*2))
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START+(4*2))
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+
+    lda #.hibyte(SM_STRAT_START+(4*3))
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START+(4*3))
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+
+    lda #.hibyte(SM_STRAT_START+(4*4))
+    sta ptrPpuAddress+1
+    lda #.lobyte(SM_STRAT_START+(4*4))
+    sta ptrPpuAddress+0
+    jsr DrawSmall_32
+    rts
+
+ClearStratFrame:
+    lda #$2A
+    sta ArrowColor
+
+    dec NextCountdown
+    bne :+
+    jsr NextStrat
+:
+    jsr WaitForNMI
+    jmp Frame
+
+ErrorFrame:
+    dec ErrorCountdown
+    beq @clearError
+    lda #$16
+    sta ArrowColor
 
     jsr WaitForNMI
     jmp Frame
@@ -728,9 +807,19 @@ ErrorFrame:
 @clearError:
     lda #0
     sta PressedCount
+    sta ErrorIRQ
+
+    lda #$28
+    sta ArrowColor
 
     jsr WaitForNMI
     jmp Frame
+
+; Set arrow color
+; Index in X
+; Palette in A
+ArrowExtColor:
+    rts
 
 AnimateArrows:
     ;dec AnimCountdown
@@ -783,6 +872,9 @@ LoadStrat:
     sta Pointer3+0
     lda StratTable+1, y
     sta Pointer3+1
+
+    lda #$28
+    sta ArrowColor
 
     lda #0
     sta PressedCount
@@ -845,22 +937,13 @@ LoadStrat:
     bne :--
 
     ; draw all the arrows
-
     ; clear buffer
     ldx #.sizeof(ArrowBufferA)-1
-    lda #$38
+    lda #0
 :
     sta ArrowBufferA, x
-    sta ArrowBufferB, x
-    ;sta ArrowBufferC, x
     dex
     bpl :-
-
-    ; ArrowStartAddr -> Pointer4
-    lda #.hibyte(ArrowStartAddr)
-    sta Pointer4+1
-    lda #.lobyte(ArrowStartAddr)
-    sta Pointer4+0
 
     ;
     ; ArrowTiles -> ptrTable
@@ -873,39 +956,11 @@ LoadStrat:
 
     lda #1 ; offset into data
     sta TmpY
-    ;lda #0
-    ;sta TmpX ; index into buffer
-    ldx #0
+    ldx #0 ; index into buffer
 @arrowLoop:
     ldy TmpY
     lda (Pointer3), y
-    ;jsr DrawIcon
-    asl a
-    tay
-
-    lda ArrowTiles, y
-    sta ptrData+0
-    lda ArrowTiles+1, y
-    sta ptrData+1
-    ldy #0
-
-    ; top row
-    lda (ptrData), y
-    sta ArrowBufferA, x
-    iny
-    lda (ptrData), y
-    sta ArrowBufferA+1, x
-
-    ; bottom row
-    iny
-    lda (ptrData), y
-    sta ArrowBufferB, x
-    iny
-    lda (ptrData), y
-    sta ArrowBufferB+1, x
-
-    inx
-    inx
+    sta ArrowBufferA, x ; ID buffer
     inx
 
     inc TmpY
@@ -1012,6 +1067,67 @@ LoadFullPalette:
     bne :-
     rts
 
+SmallIconAddrs:
+    .word ExtAttrStart+$018A
+    .word ExtAttrStart+$018E
+    .word ExtAttrStart+$0192
+    .word ExtAttrStart+$0196
+    .word ExtAttrStart+$019A
+
+SmallStratPpuAddrs:
+    .word SM_STRAT_START+0
+    .word SM_STRAT_START+4
+    .word SM_STRAT_START+8
+    .word SM_STRAT_START+12
+    .word SM_STRAT_START+16
+
+; Slot in A
+; ID in X
+DrawSmallIcon:
+    asl a
+    tay
+    lda SmallIconAddrs+1, y
+    sta Pointer1+1
+    lda SmallIconAddrs+0, y
+    sta Pointer1+0
+    jsr FillRowPointers
+
+    stx TmpX
+    txa
+    asl a
+    tay
+
+    lda StratTable+0, y
+    sta ptrData+0
+    lda StratTable+1, y
+    sta ptrData+1
+
+    ;
+    ; Full palette -> small palette
+    ldy #0
+    lda (ptrData), y
+    tax
+    lda SmallStratPal, x
+    ora TmpX
+
+    ldy #3
+@loop:
+    sta (Pointer1), y
+    sta (Pointer2), y
+    sta (Pointer3), y
+    sta (Pointer4), y
+    dey
+    bpl @loop
+    rts
+
+StratRngTable:
+    .include "strats.rng.inc"
+RngSize = (* - StratRngTable)
+.out .sprintf("RngSize: %d", RngSize)
+
+MenuBgTiles:
+    .include "menu.inc"
+
 .segment "PRGINIT"
 NMI:
     pha
@@ -1023,11 +1139,36 @@ NMI:
     lda #$FF
     sta Sleeping
 
-    ;lda #.lobyte(Sprites)
-    ;sta $2003
-    ;lda #.hibyte(Sprites)
-    ;sta $4014
+    lda DisableNMI
+    beq :+
+    jmp @nmiSkip
+:
 
+    jsr nmiJump
+
+    lda #$80
+    sta $2000
+
+    lda #0
+    sta $2005
+    sta $2005
+
+    lda #%0000_1110
+    sta $2001
+
+@nmiSkip:
+    inc rng
+    pla
+    tay
+    pla
+    tax
+    pla
+    rti
+
+nmiJump:
+    jmp (ptrNMI)
+
+nmiGame:
     lda StratPalette
     asl a
     asl a
@@ -1043,68 +1184,60 @@ NMI:
     sta $2007
     lda StratPalettes+2, x
     sta $2007
-
-    lda ErrorCountdown
-    bne :+
-    lda StratPalettes+3, x
+    lda ArrowColor
     sta $2007
-    jmp :++
-:
-    lda #$16
-    sta $2007
-:
-
-    lda #.hibyte(ArrowAttrStart)
-    sta $2006
-    lda #.lobyte(ArrowAttrStart)
-    sta $2006
-
-    ldx #0
-:
-    lda AttrBuffer, x
-    sta $2007
-    inx
-    cpx #.sizeof(AttrBuffer)
-    bne :-
 
     jsr NMI_DrawName
-    jsr NMI_DrawArrows
 
-    ldx StratId
-    ;inx
-    stx $5123
-
-    lda ArrowCount
-    and #$01
+    ldx ClearSmallStrat
     bne :+
-    lda #0 ; even
-    jmp :++
+    jmp @done
 :
-    ;lda #8 ; odd
-    lda #16 ; odd
-:
-    sta IRQScroll
-
-    lda #$88
-    sta $2000
+    dex
+    dex
+    txa
+    asl a
+    tax
 
     lda #0
-    sta $2005
-    sta $2005
+    sta ClearSmallStrat
 
-@nmiDone:
+    lda SmallStratPpuAddrs+1, x
+    sta ptrPpuAddress+1
+    lda SmallStratPpuAddrs+0, x
+    sta ptrPpuAddress+0
 
-    lda #%0001_1110
-    sta $2001
+    .repeat 4
+    lda ptrPpuAddress+1
+    sta $2006
+    lda ptrPpuAddress+0
+    sta $2006
 
-;;
+    lda #$38
+    .repeat 4
+    sta $2007
+    .endrepeat
 
-    pla
-    tay
-    pla
-    tax
-    pla
-    rti
+    clc
+    lda ptrPpuAddress+0
+    adc #32
+    sta ptrPpuAddress+0
+
+    lda ptrPpuAddress+1
+    adc #0
+    sta ptrPpuAddress+1
+    .endrepeat
+
+@done:
+    rts
+
+nmiMenu:
+    lda #.lobyte(MenuPalette)
+    sta Pointer1+0
+    lda #.hibyte(MenuPalette)
+    sta Pointer1+1
+    jsr LoadFullPalette
+    rts
 
 NMI_DrawName:
     lda #.hibyte(NameStartAddr)
@@ -1118,57 +1251,223 @@ NMI_DrawName:
 .endrepeat
     rts
 
-NMI_DrawArrows:
-    lda #.hibyte(ArrowStartAddr)
-    sta $2006
-    lda #.lobyte(ArrowStartAddr)
-    sta $2006
-
-.repeat .sizeof(ArrowBufferA), i
-    lda ArrowBufferA+i
-    sta $2007
-.endrepeat
-
-    lda #.hibyte(ArrowStartAddr+32)
-    sta $2006
-    lda #.lobyte(ArrowStartAddr+32)
-    sta $2006
-
-.repeat .sizeof(ArrowBufferB), i
-    lda ArrowBufferB+i
-    sta $2007
-.endrepeat
+irqMenu:
+    ldy #0
+    lda #0
+:
+    sta $22E0+$3C00, y
+    iny
+    cpy #96
+    bne :-
     rts
 
-IRQ:
-    bit $5204
+irqArrowScroll:
+    ;lda #$FF
+    ;sta NextIRQ
 
-    lda ErrorIRQ
-    beq @noError
-
-    lda #0
-    sta ErrorIRQ
-
-    lda #$89
-    sta $2000
-
-    lda #0
-    sta $2005
-    sta $2005
-
-    lda #150
-    sta $5203
     lda #$80
-    sta $5204
-    rti
-
-@noError:
-    lda #$88
     sta $2000
     lda IRQScroll
     sta $2005
     lda #0
     sta $2005
+    rts
+
+irqErrorText:
+    lda ErrorCountdown
+    beq :+
+
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    sta $2005
+
+:   lda #2
+    jsr SetIRQ
+    rts
+
+;
+; Write extended attributes for large icon
+; ie, write CHR bank for large strat
+irqExtAttr:
+    ;
+    ; Setup Main strat
+    lda #.hibyte(StratStartAddr+$3C00)
+    sta Pointer1+1
+    lda #.lobyte(StratStartAddr+$3C00)
+    sta Pointer1+0
+    jsr FillRowPointers
+
+    ;lda StratId
+    lda StratsCurrent+0
+    ldy #7
+:
+    sta (Pointer1), y
+    sta (Pointer2), y
+    sta (Pointer3), y
+    sta (Pointer4), y
+    dey
+    bpl :-
+
+    lda #.hibyte(StratStartAddr+(32*4)+$3C00)
+    sta Pointer1+1
+    lda #.lobyte(StratStartAddr+(32*4)+$3C00)
+    sta Pointer1+0
+    jsr FillRowPointers
+
+    ;lda StratId
+    lda StratsCurrent+0
+    ldy #7
+:
+    sta (Pointer1), y
+    sta (Pointer2), y
+    sta (Pointer3), y
+    sta (Pointer4), y
+    dey
+    bpl :-
+
+    ; Update small icons
+    ldy #1
+    sty TmpY
+@smLoop:
+    ldy TmpY
+    ldx StratsCurrent, y
+    bmi @smClear
+    dey
+    tya
+    jsr DrawSmallIcon
+
+@smNext:
+    inc TmpY
+    lda TmpY
+    cmp #6
+    bne @smLoop
+    jmp @smDone
+
+@smClear:
+    dey
+    tya
+    asl a
+    tay
+    lda SmallIconAddrs+0, y
+    sta Pointer1+0
+    lda SmallIconAddrs+1, y
+    sta Pointer1+1
+    jsr FillRowPointers
+
+    lda #0
+    ldy #3
+:
+    sta (Pointer1), y
+    sta (Pointer2), y
+    sta (Pointer3), y
+    sta (Pointer4), y
+    dey
+    bpl :-
+    jmp @smNext
+
+@smDone:
+    ;  clear id buffer
+    lda #0
+    ldx #7
+:   sta ArrowBufferB, x ; Arrow IDs to write
+    dex
+    bpl :-
+
+    ;
+    ; Setup arrow colors
+    lda PressedCount
+    sta TmpX
+    lda ErrorCountdown
+    beq @noError
+    inc TmpX
+
+@noError:
+    ;
+    ; light up the arrows that have been pressed
+    ldy #0
+@pressedLoop:
+    lda ArrowBufferA, y
+    beq :++
+    ldx TmpX
+    beq :+
+    dec TmpX
+    clc
+    adc #4 ; second set of arrows
+:
+    sta ArrowBufferB, y
+:
+    iny
+    cpy #8
+    bne @pressedLoop
+
+    ; write arrow extended Attributes
+    .repeat 8, j
+    lda ArrowBufferB+j
+    .repeat 2, i
+    sta ArrowStartAddr+$3C00+i+(j*3)
+    sta ArrowStartAddr+$3C00+32+i+(j*3)
+    .endrepeat
+    .endrepeat
+
+    lda ArrowCount
+    and #$01
+    bne :+
+    lda #0 ; even
+    jmp :++
+:
+    ;lda #8 ; odd
+    lda #16 ; odd
+:
+    sta IRQScroll
+
+    lda #1
+    ;sta NextIRQ
+    jsr SetIRQ
+    rts
+
+; first address in Pointer1
+; Pointer2-4 will be one PPU row later
+FillRowPointers:
+    clc
+    lda Pointer1+0
+    adc #32
+    sta Pointer2+0
+
+    lda Pointer1+1
+    adc #0
+    sta Pointer2+1
+
+    clc
+    lda Pointer2+0
+    adc #32
+    sta Pointer3+0
+
+    lda Pointer2+1
+    adc #0
+    sta Pointer3+1
+
+    clc
+    lda Pointer3+0
+    adc #32
+    sta Pointer4+0
+
+    lda Pointer3+1
+    adc #0
+    sta Pointer4+1
+    rts
+
+IrqCall:
+    jmp (ptrIRQ)
+
+IRQ:
+    bit $5204
+    jsr IrqCall
+    rti
+
+@noError:
     rti
 
 RESET:
@@ -1213,13 +1512,20 @@ RESET:
     sta $2000
 
     jsr MMC5_Init
-    ;jsr MMC5_ChrReverse
-    ;jmp Frame
-    jmp InitGame
+    ;jmp InitGame
+    jmp InitMenu
 
 WaitForNMI:
-:   bit Sleeping
-    bpl :-
+    inc rng
+    lda rng
+    cmp #63
+    bne :+
+    lda #0
+    sta rng
+:
+    bit Sleeping
+    bpl WaitForNMI
+
     lda #0
     sta Sleeping
     rts
@@ -1229,7 +1535,7 @@ MMC5_Init:
     lda #0
     sta $5100
 
-    ; CHR mode 3: 1k pages
+    ; CHR mode 1: 4k pages
     lda #1
     sta $5101
 
@@ -1240,46 +1546,6 @@ MMC5_Init:
     ; extended attr mode
     lda #1
     sta $5104
-
-    ; initial CHR banks
-    ldy #0
-    sty $5120
-    iny
-    sty $5121
-
-    ldy #64
-    sty $5122
-    iny
-    sty $5123
-    iny
-    sty $5124
-    iny
-    sty $5125
-    iny
-    sty $5126
-    iny
-    sty $5127
-
-    rts
-
-MMC5_ChrReverse:
-    ; initial CHR banks
-    ldy #7
-    sty $5120
-    dey
-    sty $5121
-    dey
-    sty $5122
-    dey
-    sty $5123
-    dey
-    sty $5124
-    dey
-    sty $5125
-    dey
-    sty $5126
-    dey
-    sty $5127
     rts
 
 ClearSprites:
@@ -1308,7 +1574,6 @@ FillNT1:
     jmp FillNT
 
 FillNT:
-
     pla
     ldy #30
 :
@@ -1321,8 +1586,6 @@ FillNT:
     bne :--
     rts
 
-ClearExt:
-
 ReadControllers:
     lda Controller
     sta Controller_Old
@@ -1332,7 +1595,6 @@ ReadControllers:
     sta $4016
     lda #0
     sta $4016
-    ;sta Controller
 
     ldx #$08
 @player1:
@@ -1342,37 +1604,213 @@ ReadControllers:
     dex
     bne @player1
 
-    ;lda Controller
-    ;eor Controller_Old
-
     lda Controller_Old  ; 0001
     eor #$FF            ; 1110
     and Controller      ; 0000
     sta Controller_Pressed ; 0000
     rts
 
-; Was a button pressed this frame?
-ButtonPressed:
-    sta TmpX
-    and Controller
-    sta TmpY
+MenuText:
+    .word $22C9
+    .asciiz "stratagem hero"
 
-    lda Controller_Old
-    and TmpX
+    .word $22E0
+    .repeat 32
+        .byte $B9
+    .endrepeat
+    .byte 0
 
-    cmp TmpY
-    bne btnPress_stb
+    .word $2300
+    .asciiz "          press  start          "
 
-    ; no button change
-    rts
+    .word $2320
+    .repeat 32
+        .byte $BA
+    .endrepeat
+    .byte 0
 
-btnPress_stb:
-    ; button released
-    lda TmpY
-    bne btnPress_stc
-    rts
+    .word $0000
 
-btnPress_stc:
-    ; button pressed
+MenuPalette:
+    .byte $0F, $28, $20, $28
+    .byte $0F, $10, $20, $28
+    .byte $0F, $11, $20, $28
+    .byte $0F, $19, $20, $16
+
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $20, $00
+
+InitMenu:
+    lda #0
+    sta $2001
+
+    lda #.lobyte(nmiMenu)
+    sta ptrNMI+0
+    lda #.hibyte(nmiMenu)
+    sta ptrNMI+1
+
+    lda #.lobyte(MenuPalette)
+    sta Pointer1+0
+    lda #.hibyte(MenuPalette)
+    sta Pointer1+1
+    jsr LoadFullPalette
+
+    lda #%0000_0010
+    sta $5104
+;
+;   clear it all
+    ;lda #%0000_0001
+    lda #63
+    ldx #0
+:   sta ExtAttrStart, x
+    sta ExtAttrStart+$100, x
+    sta ExtAttrStart+$200, x
+    sta ExtAttrStart+$300, x
+    inx
+    bne :-
+
     lda #1
+    ldx #0
+:
+    sta $22C0+$3C00, x
+    inx
+    bne :-
+
+    lda #%0000_0001
+    sta $5104
+
+    lda #.lobyte(MenuBgTiles)
+    sta ptrData+0
+    lda #.hibyte(MenuBgTiles)
+    sta ptrData+1
+    jsr DrawFullScreen
+
+    lda #.lobyte(MenuText)
+    sta ptrData+0
+    lda #.hibyte(MenuText)
+    sta ptrData+1
+    jsr WriteText
+
+    jsr WaitForNMI
+
+    lda #0
+    sta $2001
+
+MenuFrame:
+    jsr ReadControllers
+    lda Controller_Pressed
+    and #BUTTON_START
+    beq @nope
+
+    lda #60
+    sta TmpX
+:
+    lda #3
+    jsr SetIRQ
+    jsr WaitForNMI
+    dec TmpX
+    bne :-
+
+    jmp InitGame
+
+
+@nope:
+    jsr WaitForNMI
+    jmp MenuFrame
+
+; Pointer to text in ptrData
+; Data is an address followed by null terminated text.
+; Table is terminated with an address of zero.
+; Call when PPU is off.
+WriteText:
+
+@outer:
+    ldy #0
+    lda (ptrData), y
+    sta ptrPpuAddress+0
+    iny
+
+    lda (ptrData), y
+    sta ptrPpuAddress+1
+    iny
+
+    ora ptrPpuAddress+0
+    beq @done
+
+    lda ptrPpuAddress+1
+    sta $2006
+    lda ptrPpuAddress+0
+    sta $2006
+
+@text:
+    lda (ptrData), y
+    beq @next
+    iny
+    sta $2007
+    jmp @text
+
+@next:
+    iny
+    clc
+    tya
+    adc ptrData+0
+    sta ptrData+0
+
+    lda ptrData+1
+    adc #0
+    sta ptrData+1
+    jmp @outer
+
+@done:
+    rts
+
+; Pointer to data in ptrData.  Will draw a full
+; screen of tiles.
+DrawFullScreen:
+    lda #$20
+    sta $2006
+    lda #$00
+    sta $2006
+
+    ldy #0
+    lda (ptrData), y
+    sta Pointer1+0
+    iny
+    lda (ptrData), y
+    sta Pointer1+1
+
+    clc
+    lda ptrData+0
+    adc #2
+    sta ptrData+0
+
+    lda ptrData+1
+    adc #0
+    sta ptrData+1
+
+; write 3x256 tiles
+    ldy #0
+    ldx #3
+@loopA:
+    lda (ptrData), y
+    sta $2007
+    iny
+    bne @loopA
+    inc ptrData+1
+    dex
+    bne @loopA
+    rts ; not full screen,lmao
+
+; write 192 tiles
+    ldy #0
+    ldx #192
+@loopB:
+    lda (ptrData), y
+    sta $2007
+    iny
+    bne @loopB
+    dex
+    bne @loopB
     rts

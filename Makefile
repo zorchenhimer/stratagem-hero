@@ -9,7 +9,7 @@ NESCFG=nes_mmc5.cfg
 CAFLAGS = -g -t nes --large-alignment
 LDFLAGS = -C $(NESCFG) --dbgfile bin/$(NAME).dbg -m bin/$(NAME).map --large-alignment
 
-ARROWS=up down left right
+ARROWS=up down left right up-pressed down-pressed left-pressed right-pressed
 ARROWS_BMP = $(addsuffix .bmp,$(addprefix img/bmp/arrow-,$(ARROWS)))
 ARROWS_CHR = $(addsuffix .chr,$(addprefix img/chr/arrow-,$(ARROWS)))
 
@@ -30,9 +30,12 @@ CHRLIST=$(ARROWS_CHR) \
 		$(STRATS_SM_CHR) \
 		img/chr/numbers.chr \
 		img/chr/font.chr \
-		img/chr/font_inverted.chr
+		img/chr/font_inverted.chr \
+		img/chr/menu_bg.chr
 
 all: bin/ bin/$(NAME).nes
+send: all
+	./edlink-n8 bin/$(NAME).nes
 
 images: $(CHRLIST)
 debug:
@@ -53,12 +56,17 @@ bin/$(NAME).nes: bin/code.o bin/chr.o
 	ld65 $(LDFLAGS) -o $@ $^
 
 bin/chr.o: $(CHRLIST) chr_large.i chr_small.i
-bin/code.o: strats.inc
+bin/code.o: strats.inc strats.rng.inc menu.inc
 bin/%.o: %.asm
 	ca65 $(CAFLAGS) -o $@ $<
 
 img/chr/%_small.chr: img/bmp/%_small.bmp
 	chrutil -o $@ $^
+
+img/chr/menu_bg.chr menu.inc &: img/bmp/menu_bg.bmp
+	chrutil -o img/chr/menu_bg.chr \
+		--nt-ids menu.inc \
+		--remove-duplicates $<
 
 img/chr/%.chr: img/bmp/%.bmp
 	chrutil -o $@ $^
@@ -100,3 +108,6 @@ $(STRATS_SM_BMP) &: img/stratagems_32.aseprite
 		$< --save-as small
 	touch $(STRATS_SM_BMP)
 	-rm img/bmp/done_large.bmp img/bmp/Background_large.bmp img/bmp/grp*.bmp
+
+strats.rng.inc: rng.go
+	go run rng.go
