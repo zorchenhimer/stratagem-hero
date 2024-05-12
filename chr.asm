@@ -18,10 +18,11 @@
 .endrepeat
 
 .align $800
-.incbin "img/chr/arrow-up.chr"
-.incbin "img/chr/arrow-down.chr"
-.incbin "img/chr/arrow-left.chr"
-.incbin "img/chr/arrow-right.chr"
+;.incbin "img/chr/arrow-up.chr"
+;.incbin "img/chr/arrow-down.chr"
+;.incbin "img/chr/arrow-left.chr"
+;.incbin "img/chr/arrow-right.chr"
+.incbin "img/chr/timer.chr"
 .incbin "img/chr/font.chr"
 
 .align $1000

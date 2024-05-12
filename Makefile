@@ -1,5 +1,5 @@
 .PHONY: images debug clean-images all
-.PRECIOUS: img/bmp/*
+.PRECIOUS: img/bmp/%.bmp
 
 PATH := $(PATH):../go-nes/bin/
 
@@ -31,7 +31,13 @@ CHRLIST=$(ARROWS_CHR) \
 		img/chr/numbers.chr \
 		img/chr/font.chr \
 		img/chr/font_inverted.chr \
-		img/chr/menu_bg.chr
+		img/chr/menu_bg.chr \
+		img/chr/timer.chr
+
+INCLIST=strats.inc \
+		strats.rng.inc \
+		menu.inc \
+		timer.inc
 
 all: bin/ bin/$(NAME).nes
 send: all
@@ -56,7 +62,7 @@ bin/$(NAME).nes: bin/code.o bin/chr.o
 	ld65 $(LDFLAGS) -o $@ $^
 
 bin/chr.o: $(CHRLIST) chr_large.i chr_small.i
-bin/code.o: strats.inc strats.rng.inc menu.inc
+bin/code.o: $(INCLIST)
 bin/%.o: %.asm
 	ca65 $(CAFLAGS) -o $@ $<
 
@@ -111,3 +117,6 @@ $(STRATS_SM_BMP) &: img/stratagems_32.aseprite
 
 strats.rng.inc: rng.go
 	go run rng.go
+
+timer.inc: timer.go
+	go run $< > $@

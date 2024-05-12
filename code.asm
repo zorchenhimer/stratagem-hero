@@ -94,6 +94,10 @@ StratsCompleted: .res 1
 Round: .res 2
 ClearSmallStrat: .res 1
 
+TimerSec:   .res 1
+TimerFrame: .res 1
+TimerAnim:  .res 1 ; ticks up once every three frames
+
 .segment "OAM"
 
 Sprites: .res 256
@@ -103,6 +107,8 @@ Sprites: .res 256
 ArrowBufferA: .res 8
 ArrowBufferB: .res 8
 ;ArrowBufferC: .res 23
+
+TimerBuffer: .res 25
 
 .segment "PAGE00"
 
@@ -204,6 +210,7 @@ StratStartAddr = $2102
 NameStartAddr = $2221
 
 SM_STRAT_START= $218A
+TimerStartSec = 10
 
 .enum Arrow
 Empty = 0
@@ -277,12 +284,14 @@ IrqStates:
     .word irqErrorText   ; scroll to error text
     .word irqArrowScroll ; scroll to center arrows
     .word irqMenu        ; pause before starting game
+    .word irqTimer       ; scroll for the timer bar
 
 IrqLines:
     .byte 10
     .byte 130
     .byte 150
     .byte 10
+    .byte 184
 IrqStateCount = * - IrqLines
 
 ; IRQ state index in A
@@ -419,6 +428,16 @@ InitGame:
     lda #0
     sta $2001
     sta ClearSmallStrat
+
+    ;lda #TimerStartSec
+    ;sta TimerSec
+
+    ;lda #60
+    ;sta TimerFrame
+    lda #3
+    sta TimerFrame
+    lda #0
+    sta TimerAnim
 
     lda #.lobyte(nmiGame)
     sta ptrNMI+0
@@ -588,6 +607,24 @@ Frame:
     lda #0
     jsr SetIRQ
 
+    clc
+    ldx TimerAnim
+    lda Mult25_lo, x
+    adc #.lobyte(TimerTiles)
+    sta ptrData+0
+
+    lda Mult25_hi, x
+    adc #.hibyte(TimerTiles)
+    sta ptrData+1
+
+    ldy #0
+:
+    lda (ptrData), y
+    sta TimerBuffer, y
+    iny
+    cpy #25
+    bne :-
+
     lda NextCountdown
     beq :+
     jmp ClearStratFrame
@@ -596,6 +633,22 @@ Frame:
     lda ErrorCountdown
     beq :+
     jmp ErrorFrame
+:
+
+    ldx TimerFrame
+    bne @timerNotYet
+    ldx #3
+    stx TimerFrame
+    inc TimerAnim
+    jmp @timerTickDone
+@timerNotYet:
+    dec TimerFrame
+@timerTickDone:
+
+    lda TimerAnim
+    cmp #200
+    bne :+
+    jmp GameOver
 :
 
     jsr ReadControllers
@@ -651,6 +704,7 @@ Frame:
 
     jmp @nextFrame
 @goodPress:
+
     ldx ArrowCount
     lda ArrowStarts, x
     clc
@@ -675,7 +729,14 @@ Frame:
     lda PressedCount
     cmp ArrowCount
     bne @nextFrame
-    ; TODO: done with current?
+
+    ;
+    ; Next strat
+    sec
+    lda TimerAnim
+    sbc #10
+    sta TimerAnim
+
     lda #15
     sta NextCountdown
     jsr WaitForNMI
@@ -685,6 +746,10 @@ Frame:
     jsr WaitForNMI
 
     jmp Frame
+
+GameOver:
+    brk
+    jmp GameOver
 
 NextStrat:
     lda rng
@@ -726,6 +791,14 @@ NextStrat:
     jmp Frame
 
 NextRound:
+    inc Round
+
+    lda #TimerStartSec
+    sta TimerSec
+
+    lda #60
+    sta TimerFrame
+
     ldx #5
 :
     lda StratsNext, x
@@ -1128,6 +1201,19 @@ RngSize = (* - StratRngTable)
 MenuBgTiles:
     .include "menu.inc"
 
+TimerTiles:
+    .include "timer.inc"
+
+Mult25_lo:
+    .repeat 200, i
+    .byte .lobyte(25 * i)
+    .endrepeat
+
+Mult25_hi:
+    .repeat 200, i
+    .byte .hibyte(25 * i)
+    .endrepeat
+
 .segment "PRGINIT"
 NMI:
     pha
@@ -1188,7 +1274,7 @@ nmiGame:
     sta $2007
 
     jsr NMI_DrawName
-
+    jsr NMI_DrawTimer
     ldx ClearSmallStrat
     bne :+
     jmp @done
@@ -1239,6 +1325,17 @@ nmiMenu:
     jsr LoadFullPalette
     rts
 
+NMI_DrawTimer:
+    lda #$23
+    sta $2006
+    lda #$04
+    sta $2006
+    .repeat 25, i
+    lda TimerBuffer+i
+    sta $2007
+    .endrepeat
+    rts
+
 NMI_DrawName:
     lda #.hibyte(NameStartAddr)
     sta $2006
@@ -1250,6 +1347,15 @@ NMI_DrawName:
     sta $2007
 .endrepeat
     rts
+
+irqTimer:
+    lda #$80
+    sta $2000
+
+    lda #4
+    sta $2005
+    lda #0
+    sta $2005
 
 irqMenu:
     ldy #0
@@ -1271,6 +1377,9 @@ irqArrowScroll:
     sta $2005
     lda #0
     sta $2005
+
+    lda #4
+    jsr SetIRQ
     rts
 
 irqErrorText:
