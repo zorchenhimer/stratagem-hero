@@ -182,7 +182,7 @@ ErrorText:
 
 :   .byte StratPal::Red
     .byte "__RUDDR_"
-    .asciiz "orbital railcannon stike"
+    .asciiz "orbital railcannon strike"
 
 :   .byte StratPal::Red
     .byte "___URR__"

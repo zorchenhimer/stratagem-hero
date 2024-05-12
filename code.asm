@@ -429,11 +429,6 @@ InitGame:
     sta $2001
     sta ClearSmallStrat
 
-    ;lda #TimerStartSec
-    ;sta TimerSec
-
-    ;lda #60
-    ;sta TimerFrame
     lda #3
     sta TimerFrame
     lda #0
@@ -751,9 +746,128 @@ Frame:
 
     jmp Frame
 
+GameOverText:
+    .asciiz "game over"
+
+GameOverStart:
+    .word $2300
+    .asciiz "          press  start          "
+    .word $0000
+
 GameOver:
-    brk
-    jmp GameOver
+    jsr WaitForNMI
+    sei
+
+    lda #0
+    sta $2001
+
+    lda #.lobyte(MenuPalette)
+    sta Pointer1+0
+    lda #.hibyte(MenuPalette)
+    sta Pointer1+1
+    jsr LoadFullPalette
+
+    lda #.lobyte(nmiGameOver)
+    sta ptrNMI+0
+    lda #.hibyte(nmiGameOver)
+    sta ptrNMI+1
+
+    lda #$38
+    jsr FillNT0
+
+    lda #$22
+    sta $2006
+    lda #$00
+    sta $2006
+
+    lda #$B9
+    ldx #32
+:   sta $2007
+    dex
+    bne :-
+
+    lda #' '
+    ldx #32
+:   sta $2007
+    dex
+    bne :-
+
+
+    lda #$BA
+    ldx #32
+:   sta $2007
+    dex
+    bne :-
+
+    lda #.lobyte(GameOverStart)
+    sta ptrData+0
+    lda #.hibyte(GameOverStart)
+    sta ptrData+1
+    jsr WriteText
+
+    lda #%0000_0010
+    sta $5104
+
+;;
+;;   clear it all
+    lda #%0000_0000
+    ldx #0
+:   sta ExtAttrStart, x
+    sta ExtAttrStart+$100, x
+    sta ExtAttrStart+$200, x
+    sta ExtAttrStart+$300, x
+    inx
+    bne :-
+
+    lda #0
+    ldx #32*3
+:
+    sta $2200+$3C00, x
+    dex
+    bpl :-
+
+    ldy #0
+    lda #1
+:
+    sta $22E0+$3C00, y
+    iny
+    cpy #96
+    bne :-
+
+    lda #%0000_0001
+    sta $5104
+
+    lda #' '
+    ldy #0
+:
+    sta StratName, y
+    iny
+    cpy #31
+    bne :-
+
+    ldy #0
+:
+    lda GameOverText, y
+    beq :+
+    sta StratName, y
+    iny
+    jmp :-
+:
+
+    lda #%0000_1100
+    sta $2001
+
+GameOverFrame:
+    jsr ReadControllers
+    lda Controller
+    and #BUTTON_START
+    beq :+
+    jsr WaitForNMI
+
+    jmp InitMenu
+:
+    jsr WaitForNMI
+    jmp GameOverFrame
 
 NextStrat:
     lda rng
@@ -797,11 +911,10 @@ NextStrat:
 NextRound:
     inc Round
 
-    lda #TimerStartSec
-    sta TimerSec
-
-    lda #60
+    lda #3
     sta TimerFrame
+    lda #0
+    sta TimerAnim
 
     ldx #5
 :
@@ -1248,6 +1361,10 @@ NMI:
 nmiJump:
     jmp (ptrNMI)
 
+nmiGameOver:
+    jsr NMI_DrawName
+    rts
+
 nmiGame:
     lda StratPalette
     asl a
@@ -1350,6 +1467,7 @@ irqTimer:
     sta $2005
     lda #0
     sta $2005
+    rts
 
 irqMenu:
     ldy #0
