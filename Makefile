@@ -61,7 +61,7 @@ bin/:
 bin/$(NAME).nes: bin/code.o bin/chr.o
 	ld65 $(LDFLAGS) -o $@ $^
 
-bin/chr.o: $(CHRLIST) chr_large.i chr_small.i
+bin/chr.o: $(CHRLIST)
 bin/code.o: $(INCLIST)
 bin/%.o: %.asm
 	ca65 $(CAFLAGS) -o $@ $<
@@ -82,22 +82,9 @@ img/bmp/%.bmp: img/%.aseprite
 
 $(ARROWS_BMP) &: img/arrows_16.aseprite
 	aseprite -b --split-layers --filename-format 'img/bmp/{title}-{layer}.bmp' $< --save-as arrow
-	#aseprite -b $< --ignore-layer 'Layer 1' --save-as img/bmp/arrow-{layer}.bmp
 
 strat_small.chr: $(STRATS_SM_CHR)
 	chrutil --remove-empty --remove-duplicates -o $@ $^
-
-chr_large.i: $(STRATS_LG_BMP)
-	truncate -s 0 $@
-	for i in $(STRATS_LG_CHR) ; do \
-		echo .incbin \"$$i\" >> $@; \
-	done
-
-chr_small.i: $(STRATS_SM_BMP)
-	truncate -s 0 $@
-	for i in $(STRATS_SM_CHR) ; do \
-		echo .incbin \"$$i\" >> $@; \
-	done
 
 $(STRATS_LG_BMP) &: img/stratagems_large.aseprite
 	aseprite -b \
@@ -116,7 +103,7 @@ $(STRATS_SM_BMP) &: img/stratagems_32.aseprite
 	-rm img/bmp/done_large.bmp img/bmp/Background_large.bmp img/bmp/grp*.bmp
 
 strats.rng.inc: rng.go
-	go run rng.go
+	go run $< > $@
 
 timer.inc: timer.go
 	go run $< > $@

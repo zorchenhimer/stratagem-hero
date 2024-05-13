@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -19,9 +18,5 @@ func main() {
 		nums[i], nums[j] = nums[j], nums[i]
 	})
 
-	err := os.WriteFile("strats.rng.inc", []byte(".byte " + strings.Join(nums, ", ")+"\n"), 0666)
-	if err != nil {
-		fmt.Println("Error writing rng file:", err)
-		os.Exit(1)
-	}
+	fmt.Println(".byte " + strings.Join(nums, ", "))
 }
