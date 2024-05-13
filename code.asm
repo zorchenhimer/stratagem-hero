@@ -99,6 +99,7 @@ TimerFrame: .res 1
 TimerAnim:  .res 1 ; ticks up once every three frames
 
 RoundPerfect: .res 1
+NameScroll: .res 1
 
 .segment "OAM"
 
@@ -209,7 +210,7 @@ ArrowStartAddr = $2285
 ArrowAttrStart = $23E9
 
 StratStartAddr = $2102
-NameStartAddr = $2221
+NameStartAddr = $2220
 
 SM_STRAT_START= $218A
 TimerStartSec = 10
@@ -281,9 +282,15 @@ Strat_LgIcon:
         .byte i
     .endrepeat
 
+NameScrollOffsets:
+    .byte 0
+    .repeat 30, i
+    .byte 256-((16-((i+1)/2))*8)
+    .endrepeat
+
 .enum IRQStates
 ExtAttr
-;Error
+NameScroll
 ArrowScroll
 Menu
 Timer
@@ -291,14 +298,14 @@ Timer
 
 IrqStates:
     .word irqExtAttr     ; setup extended attributes
-    ;.word irqErrorText   ; scroll to error text
+    .word irqNameScroll  ; center the strat name
     .word irqArrowScroll ; scroll to center arrows
     .word irqMenu        ; pause before starting game
     .word irqTimer       ; scroll for the timer bar
 
 IrqLines:
     .byte 10
-    ;.byte 130
+    .byte 130
     .byte 150
     .byte 10
     .byte 184
@@ -469,16 +476,16 @@ InitGame:
     jsr DrawIcon
 
     ; Main screen
-    lda #.hibyte(NameStartAddr-1-32)
+    lda #.hibyte(NameStartAddr-32)
     sta $2006
-    lda #.lobyte(NameStartAddr-1-32)
+    lda #.lobyte(NameStartAddr-32)
     sta $2006
     jsr DrawTextBackground
 
     ; Draw ERROR on second nametable
-    lda #.hibyte(NameStartAddr-1-32+$400)
+    lda #.hibyte(NameStartAddr-32+$400)
     sta $2006
-    lda #.lobyte(NameStartAddr-1-32+$400)
+    lda #.lobyte(NameStartAddr-32+$400)
     sta $2006
     jsr DrawTextBackground
 
@@ -736,6 +743,7 @@ Frame:
     sta TimerAnim
     jmp :++
 :
+    ; make sure the timer doesn't underflow.
     lda #0
     sta TimerAnim
 :
@@ -876,6 +884,8 @@ GameOverFrame:
 NextStrat:
     lda rng
     and #$3F
+    tay
+    lda StratRngTable, y
     ldx StratsCompleted
     sta StratsNext, x
 
@@ -886,6 +896,11 @@ NextStrat:
 
     lda #IRQStates::ExtAttr
     jsr SetIRQ
+
+    ; Wait for the extended attributes to get
+    ; written  before updating the data.  If we
+    ; don't wait we get a single frame of an icon
+    ; that is either duplicated, or glitched out.
     jsr WaitForIRQ
 
     ldy #0
@@ -1121,6 +1136,9 @@ LoadStrat:
     inx
     jmp @nameloop
 @namedone:
+
+    lda NameScrollOffsets, x
+    sta NameScroll
 
     lda #' '
     jmp :++
@@ -1498,20 +1516,19 @@ irqArrowScroll:
     jsr SetIRQ
     rts
 
-;irqErrorText:
-;    lda ErrorCountdown
-;    beq :+
-;
-;    lda #$81
-;    sta $2000
-;
-;    lda #0
-;    sta $2005
-;    sta $2005
-;
-;:   lda #IRQStates::ArrowScroll
-;    jsr SetIRQ
-;    rts
+irqNameScroll:
+
+    lda #$81
+    sta $2000
+
+    lda NameScroll
+    sta $2005
+    lda #0
+    sta $2005
+
+    lda #IRQStates::ArrowScroll
+    jsr SetIRQ
+    rts
 
 ;
 ; Write extended attributes for large icon
@@ -1653,7 +1670,7 @@ irqExtAttr:
     sta IrqWait
 
     ;lda #IRQStates::Error
-    lda #IRQStates::ArrowScroll
+    lda #IRQStates::NameScroll
     jsr SetIRQ
     rts
 
@@ -1753,11 +1770,10 @@ WaitForIRQ:
     rts
 
 WaitForNMI:
-    bit Sleeping
-    bpl WaitForNMI
-
     lda #0
     sta Sleeping
+:   bit Sleeping
+    bpl :-
     rts
 
 MMC5_Init:
