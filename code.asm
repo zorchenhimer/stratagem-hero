@@ -1,9 +1,8 @@
 ; asmsyntax=ca65
 
 ; TODO:
-;   - Add some RNG for stratagem selection
-;   - Add rounds and scoring
-;   - Add timer
+;   - Add scoring
+;   - Add end of round screen
 ;
 ; Note:
 ; DrawSmallIcon needs to be called while the
@@ -41,6 +40,7 @@ BUTTON_RIGHT    = 1 << 0
 
 .segment "ZEROPAGE"
 Sleeping: .res 1
+IrqWait: .res 1
 
 Pointer1: .res 2
 Pointer2: .res 2
@@ -97,6 +97,8 @@ ClearSmallStrat: .res 1
 TimerSec:   .res 1
 TimerFrame: .res 1
 TimerAnim:  .res 1 ; ticks up once every three frames
+
+RoundPerfect: .res 1
 
 .segment "OAM"
 
@@ -279,16 +281,24 @@ Strat_LgIcon:
         .byte i
     .endrepeat
 
+.enum IRQStates
+ExtAttr
+;Error
+ArrowScroll
+Menu
+Timer
+.endenum
+
 IrqStates:
     .word irqExtAttr     ; setup extended attributes
-    .word irqErrorText   ; scroll to error text
+    ;.word irqErrorText   ; scroll to error text
     .word irqArrowScroll ; scroll to center arrows
     .word irqMenu        ; pause before starting game
     .word irqTimer       ; scroll for the timer bar
 
 IrqLines:
     .byte 10
-    .byte 130
+    ;.byte 130
     .byte 150
     .byte 10
     .byte 184
@@ -418,9 +428,6 @@ DrawSmall_32:
 .endrepeat
     rts
 
-DebugText:
-    .asciiz "henlo"
-
 InitGame:
     lda #$FF
     sta DisableNMI
@@ -514,18 +521,6 @@ InitGame:
     jsr DrawIcon
     .endrepeat
 
-    lda #$20
-    sta $2006
-    lda #$26
-    sta $2006
-    ldx #0
-:   lda DebugText, x
-    beq :+
-    sta $2007
-    inx
-    jmp :-
-:
-
     ; extended attr
 ExtAttrStart = $5C00
     lda #%0000_0010
@@ -599,7 +594,7 @@ ExtAttrStart = $5C00
     sta AnimCountdown
 
 Frame:
-    lda #0
+    lda #IRQStates::ExtAttr
     jsr SetIRQ
 
     clc
@@ -731,10 +726,19 @@ Frame:
 
     ;
     ; Next strat
+    lda TimerAnim
+    cmp #10
+    beq :+
+    bmi :+
     sec
     lda TimerAnim
     sbc #10
     sta TimerAnim
+    jmp :++
+:
+    lda #0
+    sta TimerAnim
+:
 
     lda #15
     sta NextCountdown
@@ -880,9 +884,9 @@ NextStrat:
     sbc StratsCompleted
     sta ClearSmallStrat
 
-    lda #0
+    lda #IRQStates::ExtAttr
     jsr SetIRQ
-    jsr WaitForNMI
+    jsr WaitForIRQ
 
     ldy #0
 :
@@ -1490,24 +1494,24 @@ irqArrowScroll:
     lda #0
     sta $2005
 
-    lda #4
+    lda #IRQStates::Timer
     jsr SetIRQ
     rts
 
-irqErrorText:
-    lda ErrorCountdown
-    beq :+
-
-    lda #$81
-    sta $2000
-
-    lda #0
-    sta $2005
-    sta $2005
-
-:   lda #2
-    jsr SetIRQ
-    rts
+;irqErrorText:
+;    lda ErrorCountdown
+;    beq :+
+;
+;    lda #$81
+;    sta $2000
+;
+;    lda #0
+;    sta $2005
+;    sta $2005
+;
+;:   lda #IRQStates::ArrowScroll
+;    jsr SetIRQ
+;    rts
 
 ;
 ; Write extended attributes for large icon
@@ -1549,6 +1553,7 @@ irqExtAttr:
     dey
     bpl :-
 
+    ;
     ; Update small icons
     ldy #1
     sty TmpY
@@ -1644,8 +1649,11 @@ irqExtAttr:
 :
     sta IRQScroll
 
-    lda #1
-    ;sta NextIRQ
+    lda #0
+    sta IrqWait
+
+    ;lda #IRQStates::Error
+    lda #IRQStates::ArrowScroll
     jsr SetIRQ
     rts
 
@@ -1736,14 +1744,15 @@ RESET:
     ;jmp InitGame
     jmp InitMenu
 
+; Wait for the exteded attribute IRQ to finish
+WaitForIRQ:
+    lda #$FF
+    sta IrqWait
+:   bit IrqWait
+    bmi :-
+    rts
+
 WaitForNMI:
-    inc rng
-    lda rng
-    cmp #63
-    bne :+
-    lda #0
-    sta rng
-:
     bit Sleeping
     bpl WaitForNMI
 
@@ -1928,7 +1937,7 @@ MenuFrame:
     lda #60
     sta TmpX
 :
-    lda #3
+    lda #IRQStates::Menu
     jsr SetIRQ
     jsr WaitForNMI
     dec TmpX
