@@ -3,7 +3,7 @@
 
 PATH := $(PATH):../go-nes/bin/
 
-NAME=hero
+NAME=stratagem-hero
 NESCFG=nes_mmc5.cfg
 
 CAFLAGS = -g -t nes --large-alignment
