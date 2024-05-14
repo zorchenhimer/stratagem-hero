@@ -1498,6 +1498,9 @@ irqTimer:
     sta $2005
     lda #0
     sta $2005
+
+    lda #0
+    sta IrqWait
     rts
 
 irqMenu:
@@ -1697,9 +1700,6 @@ irqExtAttr:
     lda #16 ; odd
 :
     sta IRQScroll
-
-    lda #0
-    sta IrqWait
 
     ;lda #IRQStates::Error
     lda #IRQStates::NameScroll
