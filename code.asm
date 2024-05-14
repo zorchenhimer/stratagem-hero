@@ -284,8 +284,8 @@ Strat_LgIcon:
 
 NameScrollOffsets:
     .byte 0
-    .repeat 30, i
-    .byte 256-((16-((i+1)/2))*8)
+    .repeat 31, i
+    .byte 256-((16-((i+1)/2))*8)+(((i+1) .mod 2)*4)
     .endrepeat
 
 .enum IRQStates
@@ -294,6 +294,8 @@ NameScroll
 ArrowScroll
 Menu
 Timer
+GameOverA
+GameOverB
 .endenum
 
 IrqStates:
@@ -302,6 +304,8 @@ IrqStates:
     .word irqArrowScroll ; scroll to center arrows
     .word irqMenu        ; pause before starting game
     .word irqTimer       ; scroll for the timer bar
+    .word irqGameOverA
+    .word irqGameOverB
 
 IrqLines:
     .byte 10
@@ -309,6 +313,8 @@ IrqLines:
     .byte 150
     .byte 10
     .byte 184
+    .byte 130
+    .byte 150
 IrqStateCount = * - IrqLines
 
 ; IRQ state index in A
@@ -870,6 +876,9 @@ GameOver:
     sta $2001
 
 GameOverFrame:
+    lda #IRQStates::GameOverA
+    jsr SetIRQ
+
     jsr ReadControllers
     lda Controller
     and #BUTTON_START
@@ -1514,6 +1523,29 @@ irqArrowScroll:
 
     lda #IRQStates::Timer
     jsr SetIRQ
+    rts
+
+irqGameOverA:
+    lda #$81
+    sta $2000
+
+    lda #$A8
+    sta $2005
+    lda #0
+    sta $2005
+
+    lda #IRQStates::GameOverB
+    jsr SetIRQ
+    rts
+
+irqGameOverB:
+    lda #$80
+    sta $2000
+
+    lda #$0
+    sta $2005
+    lda #0
+    sta $2005
     rts
 
 irqNameScroll:
