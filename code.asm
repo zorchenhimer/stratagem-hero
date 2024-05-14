@@ -282,6 +282,13 @@ Strat_LgIcon:
         .byte i
     .endrepeat
 
+GameStaticText:
+    .word $2057
+    .asciiz "round"
+    .word $20B7
+    .asciiz "score"
+    .word $0000
+
 NameScrollOffsets:
     .byte 0
     .repeat 31, i
@@ -495,25 +502,6 @@ InitGame:
     sta $2006
     jsr DrawTextBackground
 
-    lda #$26
-    sta $2006
-    lda #$2E
-    sta $2006
-
-    lda ErrorText+0
-    sta $2007
-    lda ErrorText+1
-    sta $2007
-    lda ErrorText+2
-    sta $2007
-    lda ErrorText+3
-    sta $2007
-    lda ErrorText+4
-    sta $2007
-
-    ;jsr DrawSmall_16
-    ldy #0
-
     jsr DrawSmallStrats
 
     ; Arrows;  they all use the same tile IDs,
@@ -585,6 +573,13 @@ ExtAttrStart = $5C00
 
     lda StratsCurrent+0
     jsr LoadStrat
+
+    lda #.lobyte(GameStaticText)
+    sta ptrData+0
+    lda #.hibyte(GameStaticText)
+    sta ptrData+1
+    jsr WriteText
+
 
     lda #%0000_0001
     sta $5104
@@ -1924,6 +1919,9 @@ InitMenu:
     lda #0
     sta $2001
 
+    lda #$BB
+    jsr FillNT0
+
     lda #.lobyte(nmiMenu)
     sta ptrNMI+0
     lda #.hibyte(nmiMenu)
@@ -1934,6 +1932,18 @@ InitMenu:
     lda #.hibyte(MenuPalette)
     sta Pointer1+1
     jsr LoadFullPalette
+
+    lda #.lobyte(MenuBgTiles)
+    sta ptrData+0
+    lda #.hibyte(MenuBgTiles)
+    sta ptrData+1
+    jsr DrawFullScreen
+
+    lda #.lobyte(MenuText)
+    sta ptrData+0
+    lda #.hibyte(MenuText)
+    sta ptrData+1
+    jsr WriteText
 
     lda #%0000_0010
     sta $5104
@@ -1958,18 +1968,6 @@ InitMenu:
 
     lda #%0000_0001
     sta $5104
-
-    lda #.lobyte(MenuBgTiles)
-    sta ptrData+0
-    lda #.hibyte(MenuBgTiles)
-    sta ptrData+1
-    jsr DrawFullScreen
-
-    lda #.lobyte(MenuText)
-    sta ptrData+0
-    lda #.hibyte(MenuText)
-    sta ptrData+1
-    jsr WriteText
 
     jsr WaitForNMI
 
