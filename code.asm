@@ -2,7 +2,6 @@
 
 ; TODO:
 ;   - Add scoring
-;   - Add end of round screen
 ;
 ; Note:
 ; DrawSmallIcon needs to be called while the
@@ -303,6 +302,9 @@ Menu
 Timer
 GameOverA
 GameOverB
+RoundOver
+RoundOverTxt
+RoundOverBottom
 .endenum
 
 IrqStates:
@@ -313,6 +315,9 @@ IrqStates:
     .word irqTimer       ; scroll for the timer bar
     .word irqGameOverA
     .word irqGameOverB
+    .word irqRoundOver   ; inter-round screen
+    .word irqRoundOverTxt
+    .word irqRoundOverBottom
 
 IrqLines:
     .byte 10
@@ -320,6 +325,9 @@ IrqLines:
     .byte 150
     .byte 10
     .byte 184
+    .byte 130
+    .byte 150
+    .byte 10
     .byte 130
     .byte 150
 IrqStateCount = * - IrqLines
@@ -736,8 +744,7 @@ Frame:
     ; Next strat
     lda TimerAnim
     cmp #10
-    beq :+
-    bmi :+
+    bcc :+
     sec
     lda TimerAnim
     sbc #10
@@ -931,6 +938,9 @@ NextStrat:
     jsr WaitForNMI
     jmp Frame
 
+NextRoundText:
+    .asciiz "round clear"
+
 NextRound:
     inc Round
 
@@ -952,17 +962,71 @@ NextRound:
     lda #0
     sta StratsCompleted
 
-    ; TODO: mid-round screen
+    lda #.lobyte(nmiRoundOver)
+    sta ptrNMI+0
+    lda #.hibyte(nmiRoundOver)
+    sta ptrNMI+1
+
     jsr WaitForNMI
 
-    jsr DrawSmallStrats
-    lda #$80
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+
+NextRoundFrame:
+
+    lda #IRQStates::RoundOver
+    jsr SetIRQ
+
+    jsr ReadControllers
+
+    lda #BUTTON_A
+    and Controller_Pressed
+    beq :+
+    jmp RoundStart
+:
+
+    jsr WaitForNMI
+
+    lda #$81
+    sta $2000
+
+    jmp NextRoundFrame
+
+RoundStart:
+    jsr WaitForNMI
+    lda #$81
     sta $2000
 
     lda #0
     sta $2005
     sta $2005
 
+    lda #IRQStates::RoundOver
+    jsr SetIRQ
+
+    jsr DrawSmallStrats
+
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    sta $2005
+
+
+    lda #.lobyte(nmiGame)
+    sta ptrNMI+0
+    lda #.hibyte(nmiGame)
+    sta ptrNMI+1
+
+    jsr WaitForNMI
+    lda #IRQStates::ExtAttr
+    jsr SetIRQ
     jmp Frame
 
 DrawSmallStrats:
@@ -1410,6 +1474,13 @@ nmiGame:
     lda ArrowColor
     sta $2007
 
+    .repeat 3, i
+    .repeat 4, j
+    lda Palettes+4+(i*4)+j
+    sta $2007
+    .endrepeat
+    .endrepeat
+
     jsr NMI_DrawName
     jsr NMI_DrawTimer
     ldx ClearSmallStrat
@@ -1460,6 +1531,30 @@ nmiMenu:
     lda #.hibyte(MenuPalette)
     sta Pointer1+1
     jsr LoadFullPalette
+    rts
+
+nmiRoundOver:
+    lda #.lobyte(MenuPalette)
+    sta Pointer1+0
+    lda #.hibyte(MenuPalette)
+    sta Pointer1+1
+    jsr LoadFullPalette
+
+    lda #.hibyte(NameStartAddr)
+    sta $2006
+    lda #.lobyte(NameStartAddr)
+    sta $2006
+
+    .repeat 11, i
+    lda NextRoundText+i
+    sta $2007
+    .endrepeat
+
+    lda #' '
+    .repeat 20
+    sta $2007
+    .endrepeat
+
     rts
 
 NMI_DrawTimer:
@@ -1701,6 +1796,88 @@ irqExtAttr:
     jsr SetIRQ
     rts
 
+; rewriting all the extended attribute data for
+; the next round screen.
+irqRoundOver:
+    lda #.hibyte(StratStartAddr+$3C00)
+    sta Pointer1+1
+    lda #.lobyte(StratStartAddr+$3C00)
+    sta Pointer1+0
+    jsr FillRowPointers
+
+    lda #1
+    ldy #7
+:
+    sta (Pointer1), y
+    sta (Pointer2), y
+    sta (Pointer3), y
+    sta (Pointer4), y
+    dey
+    bpl :-
+
+    lda #.hibyte(StratStartAddr+(32*4)+$3C00)
+    sta Pointer1+1
+    lda #.lobyte(StratStartAddr+(32*4)+$3C00)
+    sta Pointer1+0
+    jsr FillRowPointers
+
+    ;lda StratId
+    lda #1
+    ldy #7
+:
+    sta (Pointer1), y
+    sta (Pointer2), y
+    sta (Pointer3), y
+    sta (Pointer4), y
+    dey
+    bpl :-
+
+    ldx #1
+    stx TmpY
+:
+    ldx TmpY
+    lda #1
+    jsr DrawSmallIcon
+    inc TmpY
+    lda TmpY
+    cmp #6
+    bne :-
+
+    ; write arrow extended Attributes
+    lda #0
+    .repeat 8, j
+    .repeat 2, i
+    sta ArrowStartAddr+$3C00+i+(j*3)
+    sta ArrowStartAddr+$3C00+32+i+(j*3)
+    .endrepeat
+    .endrepeat
+
+    lda #IRQStates::RoundOverTxt
+    jsr SetIRQ
+    rts
+
+irqRoundOverTxt:
+    lda #$81
+    sta $2000
+
+    lda NameScrollOffsets+11
+    sta $2005
+    lda #0
+    sta $2005
+    lda #IRQStates::RoundOverBottom
+    jsr SetIRQ
+    rts
+
+irqRoundOverBottom:
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+    rts
+
 ; first address in Pointer1
 ; Pointer2-4 will be one PPU row later
 FillRowPointers:
@@ -1736,11 +1913,20 @@ IrqCall:
     jmp (ptrIRQ)
 
 IRQ:
+    pha
+    txa
+    pha
+    tya
+    pha
+
     bit $5204
     jsr IrqCall
-    rti
 
-@noError:
+    pla
+    tay
+    pla
+    tax
+    pla
     rti
 
 RESET:
@@ -1907,8 +2093,8 @@ MenuText:
 MenuPalette:
     .byte $0F, $28, $20, $28
     .byte $0F, $10, $20, $28
-    .byte $0F, $11, $20, $28
-    .byte $0F, $19, $20, $16
+    .byte $0F, $0F, $0F, $0F
+    .byte $0F, $0F, $0F, $0F
 
     .byte $0F, $10, $20, $00
     .byte $0F, $10, $20, $00
