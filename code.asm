@@ -3,6 +3,12 @@
 ; TODO:
 ;   - Add scoring
 ;
+; Scoring:
+;   - 5pt per arrow
+;   - 100pt for perfect round
+;   - +25pt for each round (starting at 75 for
+;     round 1)
+;
 ; Note:
 ; DrawSmallIcon needs to be called while the
 ; extended memory area is writable in extended
@@ -99,7 +105,15 @@ TimerAnim:  .res 1 ; ticks up once every three frames
 
 RoundPerfect: .res 1
 NameScroll: .res 1
+Score: .res 2
 
+ScoreBonusTime: .res 1
+ScoreBonusRound: .res 2
+
+; Bin to Dec stuff
+bdInput: .res 2
+bdTmpA: .res 2
+bdOutput: .res 5
 .segment "OAM"
 
 Sprites: .res 256
@@ -213,6 +227,8 @@ NameStartAddr = $2220
 
 SM_STRAT_START= $218A
 TimerStartSec = 10
+RoundScoreDelay = 30
+RoundScorePpuAddr = $2456
 
 .enum Arrow
 Empty = 0
@@ -281,11 +297,22 @@ Strat_LgIcon:
         .byte i
     .endrepeat
 
+RoundOverStaticStart = $2444
 GameStaticText:
     .word $2057
     .asciiz "round"
     .word $20B7
     .asciiz "score"
+
+    .word RoundOverStaticStart
+    .asciiz "round bonus"
+    .word RoundOverStaticStart+(64*1)
+    .asciiz "time bonus"
+    .word RoundOverStaticStart+(64*2)
+    .asciiz "perfect bonus"
+    .word RoundOverStaticStart+(64*3)
+    .asciiz "total score"
+
     .word $0000
 
 NameScrollOffsets:
@@ -305,6 +332,7 @@ GameOverB
 RoundOver
 RoundOverTxt
 RoundOverBottom
+RoundOverPressScroll
 .endenum
 
 IrqStates:
@@ -318,6 +346,7 @@ IrqStates:
     .word irqRoundOver   ; inter-round screen
     .word irqRoundOverTxt
     .word irqRoundOverBottom
+    .word irqRoundOverPressScroll
 
 IrqLines:
     .byte 10
@@ -330,6 +359,7 @@ IrqLines:
     .byte 10
     .byte 130
     .byte 150
+    .byte 80
 IrqStateCount = * - IrqLines
 
 ; IRQ state index in A
@@ -609,6 +639,9 @@ ExtAttrStart = $5C00
     lda #60
     sta AnimCountdown
 
+    lda #100
+    sta RoundPerfect
+
 Frame:
     lda #IRQStates::ExtAttr
     jsr SetIRQ
@@ -708,6 +741,9 @@ Frame:
     cmp TmpX
     beq @goodPress
 ;@badPress:
+
+    lda #0
+    sta RoundPerfect
 
     lda #60
     sta ErrorCountdown
@@ -893,6 +929,22 @@ GameOverFrame:
     jmp GameOverFrame
 
 NextStrat:
+    ;
+    ; add score for cleared strat
+    lda ArrowCount
+    sta $5205
+    lda #5
+    sta $5206
+
+    clc
+    lda $5205
+    adc Score+0
+    sta Score+0
+
+    lda $5206
+    adc Score+1
+    sta Score+1
+
     lda rng
     and #$3F
     tay
@@ -940,14 +992,39 @@ NextStrat:
 
 NextRoundText:
     .asciiz "round clear"
+NextRoundTextButton:
+    .asciiz "press the any key"
 
 NextRound:
-    inc Round
+    lda #.lobyte(nmiRoundOver)
+    sta ptrNMI+0
+    lda #.hibyte(nmiRoundOver)
+    sta ptrNMI+1
 
-    lda #3
-    sta TimerFrame
+    jsr WaitForNMI
+    ; clear out prev scores
+    .repeat 4, j
+    ldx #.hibyte(RoundScorePpuAddr+(64*j))
+    stx $2006
+    ldx #.lobyte(RoundScorePpuAddr+(64*j))
+    stx $2006
+
+    lda #' '
+    .repeat 5, i
+    sta $2007
+    .endrepeat
+    .endrepeat
+
+    lda #$81
+    sta $2000
+
     lda #0
-    sta TimerAnim
+    sta $2005
+    lda #0
+    sta $2005
+
+    lda #IRQStates::RoundOver
+    jsr SetIRQ
 
     ldx #5
 :
@@ -962,13 +1039,259 @@ NextRound:
     lda #0
     sta StratsCompleted
 
-    lda #.lobyte(nmiRoundOver)
-    sta ptrNMI+0
-    lda #.hibyte(nmiRoundOver)
-    sta ptrNMI+1
+    lda #0
+    sta ScoreBonusTime+0
+    sta ScoreBonusTime+1
+    sta ScoreBonusRound+0
+    sta ScoreBonusRound+1
 
+    ;
+    ; Time bonus
+    sec
+    lda #200
+    sbc TimerAnim
+    lsr a ; div by 2
+    sta ScoreBonusTime+0
+    clc
+    adc Score+0
+    sta Score+0
+    bcc :+
+    inc Score+1
+:
+
+    ;
+    ; Round bonus
+    lda #25
+    sta $5205
+    lda Round
+    sta $5206
+
+    clc
+    lda $5205
+    sta ScoreBonusRound+0
+    adc Score+0
+    sta Score+0
+
+    lda $5206
+    sta ScoreBonusRound+1
+    adc Score+1
+    sta Score+1
+
+    ;
+    ; Round bonus base
+    clc
+    lda #75
+    adc Score+0
+    sta Score+0
+    bcc :+
+    inc Score+1
+:
+
+    clc
+    lda #75
+    adc ScoreBonusRound+0
+    sta ScoreBonusRound+0
+    bcc :+
+    inc ScoreBonusRound+1
+:
+
+    clc
+    lda RoundPerfect
+    adc Score+0
+    sta Score+0
+    bcc :+
+    inc Score+1
+:
+
+    inc Round
+
+    ; Round bonus bin->dec
+    lda ScoreBonusRound+0
+    sta bdInput+0
+    lda ScoreBonusRound+1
+    sta bdInput+1
+    jsr BinToDec
+
+    ldx #RoundScoreDelay
+:
     jsr WaitForNMI
+    lda #$81
+    sta $2000
 
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+    dex
+    bne :-
+
+    ;
+    ; Write out round bonus
+
+    lda #.hibyte(RoundScorePpuAddr+(64*0))
+    sta $2006
+    lda #.lobyte(RoundScorePpuAddr+(64*0))
+    sta $2006
+
+    .repeat 5, i
+    lda bdOutput+i
+    sta $2007
+    .endrepeat
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+
+    ;
+    ; Time bonus bin->dec
+    lda ScoreBonusTime+0
+    sta bdInput+0
+    lda #0
+    sta bdInput+1
+    jsr BinToDec
+
+    ldx #RoundScoreDelay
+:
+    jsr WaitForNMI
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+    dex
+    bne :-
+
+    ;
+    ; Write out time bonus
+
+    lda #.hibyte(RoundScorePpuAddr+(64*1))
+    sta $2006
+    lda #.lobyte(RoundScorePpuAddr+(64*1))
+    sta $2006
+    .repeat 5, i
+    lda bdOutput+i
+    sta $2007
+    .endrepeat
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+
+    ;
+    ; Perfect bonus bin->dec
+    lda RoundPerfect
+    sta bdInput+0
+    lda #0
+    sta bdInput+1
+    jsr BinToDec
+
+    ldx #RoundScoreDelay
+:
+    jsr WaitForNMI
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+    dex
+    bne :-
+
+    ;
+    ; Write out time bonus
+
+    lda #.hibyte(RoundScorePpuAddr+(64*2))
+    sta $2006
+    lda #.lobyte(RoundScorePpuAddr+(64*2))
+    sta $2006
+    .repeat 5, i
+    lda bdOutput+i
+    sta $2007
+    .endrepeat
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+
+    ;
+    ; Total score bin->dec
+    lda Score+0
+    sta bdInput+0
+    lda Score+1
+    sta bdInput+1
+    jsr BinToDec
+
+    ldx #RoundScoreDelay
+:
+    jsr WaitForNMI
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+    dex
+    bne :-
+
+    ;
+    ; Write out time bonus
+
+    lda #.hibyte(RoundScorePpuAddr+(64*3))
+    sta $2006
+    lda #.lobyte(RoundScorePpuAddr+(64*3))
+    sta $2006
+    .repeat 5, i
+    lda bdOutput+i
+    sta $2007
+    .endrepeat
+
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+
+    ldx #RoundScoreDelay
+:
+    jsr WaitForNMI
+    lda #$81
+    sta $2000
+
+    lda #0
+    sta $2005
+    lda #0
+    sta $2005
+    dex
+    bne :-
+
+    lda #$25
+    sta $2006
+    lda #$80
+    sta $2006
+
+    ldy #0
+:
+    lda NextRoundTextButton, y
+    beq :+
+    sta $2007
+    iny
+    jmp :-
+:
     lda #$81
     sta $2000
 
@@ -979,13 +1302,8 @@ NextRound:
 
 NextRoundFrame:
 
-    lda #IRQStates::RoundOver
-    jsr SetIRQ
-
     jsr ReadControllers
-
-    lda #BUTTON_A
-    and Controller_Pressed
+    lda Controller_Pressed
     beq :+
     jmp RoundStart
 :
@@ -998,6 +1316,14 @@ NextRoundFrame:
     jmp NextRoundFrame
 
 RoundStart:
+    lda #100
+    sta RoundPerfect
+
+    lda #3
+    sta TimerFrame
+    lda #0
+    sta TimerAnim
+
     jsr WaitForNMI
     lda #$81
     sta $2000
@@ -1799,48 +2125,12 @@ irqExtAttr:
 ; rewriting all the extended attribute data for
 ; the next round screen.
 irqRoundOver:
-    lda #.hibyte(StratStartAddr+$3C00)
-    sta Pointer1+1
-    lda #.lobyte(StratStartAddr+$3C00)
-    sta Pointer1+0
-    jsr FillRowPointers
-
     lda #1
-    ldy #7
-:
-    sta (Pointer1), y
-    sta (Pointer2), y
-    sta (Pointer3), y
-    sta (Pointer4), y
-    dey
-    bpl :-
-
-    lda #.hibyte(StratStartAddr+(32*4)+$3C00)
-    sta Pointer1+1
-    lda #.lobyte(StratStartAddr+(32*4)+$3C00)
-    sta Pointer1+0
-    jsr FillRowPointers
-
-    ;lda StratId
-    lda #1
-    ldy #7
-:
-    sta (Pointer1), y
-    sta (Pointer2), y
-    sta (Pointer3), y
-    sta (Pointer4), y
-    dey
-    bpl :-
-
-    ldx #1
-    stx TmpY
-:
-    ldx TmpY
-    lda #1
-    jsr DrawSmallIcon
-    inc TmpY
-    lda TmpY
-    cmp #6
+    ldx #0
+    ; Just the top half of the screen
+:   sta ExtAttrStart, x
+    sta ExtAttrStart+$100, x
+    inx
     bne :-
 
     ; write arrow extended Attributes
@@ -1852,6 +2142,18 @@ irqRoundOver:
     .endrepeat
     .endrepeat
 
+    lda #IRQStates::RoundOverPressScroll
+    jsr SetIRQ
+    rts
+
+irqRoundOverPressScroll:
+    lda #$80
+    sta $2000
+
+    lda NameScrollOffsets+17
+    sta $2005
+    lda #0
+    sta $2005
     lda #IRQStates::RoundOverTxt
     jsr SetIRQ
     rts
@@ -1876,6 +2178,8 @@ irqRoundOverBottom:
     sta $2005
     lda #0
     sta $2005
+    lda #IRQStates::RoundOver
+    jsr SetIRQ
     rts
 
 ; first address in Pointer1
@@ -2135,7 +2439,6 @@ InitMenu:
     sta $5104
 ;
 ;   clear it all
-    ;lda #%0000_0001
     lda #63
     ldx #0
 :   sta ExtAttrStart, x
@@ -2275,4 +2578,165 @@ DrawFullScreen:
     bne @loopB
     dex
     bne @loopB
+    rts
+
+bdTable10k:
+    .word 60_000
+    .word 50_000
+    .word 40_000
+    .word 30_000
+    .word 20_000
+    .word 10_000
+    .word 00_000
+
+bdTable1k:
+    .word 9_000
+    .word 8_000
+    .word 7_000
+    .word 6_000
+    .word 5_000
+    .word 4_000
+    .word 3_000
+    .word 2_000
+    .word 1_000
+    .word 0_000
+
+bdTable100:
+    .word 900
+    .word 800
+    .word 700
+    .word 600
+    .word 500
+    .word 400
+    .word 300
+    .word 200
+    .word 100
+    .word 000
+
+bdTable10:
+    .word 90
+    .word 80
+    .word 70
+    .word 60
+    .word 50
+    .word 40
+    .word 30
+    .word 20
+    .word 10
+    .word 00
+
+bdTable1:
+    .word 9
+    .word 8
+    .word 7
+    .word 6
+    .word 5
+    .word 4
+    .word 3
+    .word 2
+    .word 1
+    .word 0
+
+; Input in bdInput (word)
+; Output in bdOutput (5-bytes, CHR tiles)
+BinToDec:
+    ldy #5
+    lda #0
+:
+    sta bdOutput, y
+    dey
+    bpl :-
+
+    lda #.hibyte(bdTable10k)
+    sta ptrTable+1
+    lda #.lobyte(bdTable10k)
+    sta ptrTable+0
+    ldx #6
+    jsr FindDigit
+    sta bdOutput+0
+
+    lda #.hibyte(bdTable1k)
+    sta ptrTable+1
+    lda #.lobyte(bdTable1k)
+    sta ptrTable+0
+    ldx #9
+    jsr FindDigit
+    sta bdOutput+1
+
+    lda #.hibyte(bdTable100)
+    sta ptrTable+1
+    lda #.lobyte(bdTable100)
+    sta ptrTable+0
+    ldx #9
+    jsr FindDigit
+    sta bdOutput+2
+
+    lda #.hibyte(bdTable10)
+    sta ptrTable+1
+    lda #.lobyte(bdTable10)
+    sta ptrTable+0
+    ldx #9
+    jsr FindDigit
+    sta bdOutput+3
+
+    lda #.hibyte(bdTable1)
+    sta ptrTable+1
+    lda #.lobyte(bdTable1)
+    sta ptrTable+0
+    ldx #9
+    jsr FindDigit
+    sta bdOutput+4
+
+    ldy #0
+:
+    lda bdOutput, y
+    cmp #'0'
+    bne :+
+    lda #' '
+    sta bdOutput, y
+    iny
+    cpy #4
+    bne :-
+:
+    rts
+
+FindDigit:
+    ldy #0
+@loop2:
+    lda (ptrTable), y
+    sta bdTmpA+0
+    iny
+    lda (ptrTable), y
+    sta bdTmpA+1
+    iny
+    jsr bdCompare
+    bcs :+
+    dex
+    jmp @loop2
+    sta bdOutput+1
+:
+    dey
+    dey
+
+    sec
+    lda bdInput+0
+    sbc (ptrTable), y
+    sta bdInput+0
+    iny
+
+    lda bdInput+1
+    sbc (ptrTable), y
+    sta bdInput+1
+
+    txa
+    ora #'0'
+    rts
+
+bdCompare:
+    lda bdInput+1
+    cmp bdTmpA+1
+    bne :+
+    lda bdInput+0
+    cmp bdTmpA+0
+:
     rts
