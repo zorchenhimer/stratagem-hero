@@ -840,6 +840,10 @@ GameOverText:
 GameOverStart:
     .word $2300
     .asciiz "          press  start          "
+    .word $2144
+    .asciiz "final score"
+    .word $20E4
+    .asciiz "final round"
     .word $0000
 
 GameOver:
@@ -896,14 +900,11 @@ GameOver:
     lda #%0000_0010
     sta $5104
 
-;;
-;;   clear it all
-    lda #%0000_0000
+    lda #1
     ldx #0
+    ; Just the top half of the screen
 :   sta ExtAttrStart, x
     sta ExtAttrStart+$100, x
-    sta ExtAttrStart+$200, x
-    sta ExtAttrStart+$300, x
     inx
     bne :-
 
@@ -920,6 +921,21 @@ GameOver:
     sta $22E0+$3C00, y
     iny
     cpy #96
+    bne :-
+
+    ldy #0
+    lda #%0100_0001
+:
+    sta $20F7+$3C00, y
+    iny
+    cpy #5
+    bne :-
+
+    ldy #0
+:
+    sta $2157+$3C00, y
+    iny
+    cpy #5
     bne :-
 
     lda #%0000_0001
@@ -941,6 +957,30 @@ GameOver:
     iny
     jmp :-
 :
+
+    lda #$21
+    sta $2006
+    lda #$57
+    sta $2006
+
+    ldy #0
+:   lda RunningScore, y
+    sta $2007
+    iny
+    cpy #6
+    bne :-
+
+    lda #$20
+    sta $2006
+    lda #$F7
+    sta $2006
+
+    ldy #0
+:   lda RunningRound, y
+    sta $2007
+    iny
+    cpy #6
+    bne :-
 
     lda #%0000_1100
     sta $2001
@@ -1840,6 +1880,12 @@ nmiJump:
     jmp (ptrNMI)
 
 nmiGameOver:
+    lda #.lobyte(ScoresPalette)
+    sta Pointer1+0
+    lda #.hibyte(ScoresPalette)
+    sta Pointer1+1
+    jsr LoadFullPalette
+
     jsr NMI_DrawName
     rts
 
@@ -1941,9 +1987,9 @@ nmiMenu:
     rts
 
 nmiRoundOver:
-    lda #.lobyte(MenuPalette)
+    lda #.lobyte(ScoresPalette)
     sta Pointer1+0
-    lda #.hibyte(MenuPalette)
+    lda #.hibyte(ScoresPalette)
     sta Pointer1+1
     jsr LoadFullPalette
 
@@ -2255,12 +2301,61 @@ irqExtAttr:
 ; rewriting all the extended attribute data for
 ; the next round screen.
 irqRoundOver:
+    lda #%0100_0001
+    ldy #0
+:
+    sta RoundScorePpuAddr-$400+$3C00+(64*0), y
+    sta RoundScorePpuAddr-$400+$3C00+(64*1), y
+    sta RoundScorePpuAddr-$400+$3C00+(64*2), y
+    sta RoundScorePpuAddr-$400+$3C00+(64*3), y
+    iny
+    cpy #5
+    bne :-
+
     lda #1
-    ldx #0
-    ; Just the top half of the screen
-:   sta ExtAttrStart, x
-    sta ExtAttrStart+$100, x
-    inx
+    ldy #0
+:
+    sta RoundOverStaticStart-$400+$3C00+(64*0), y
+    sta RoundOverStaticStart-$400+$3C00+(64*1), y
+    sta RoundOverStaticStart-$400+$3C00+(64*2), y
+    sta RoundOverStaticStart-$400+$3C00+(64*3), y
+    iny
+    cpy #13
+    bne :-
+
+    ldy #0
+:
+    sta $2588-$400+$3C00, y
+    iny
+    cpy #17
+    bne :-
+
+    sta $2502-$400+$3C00
+    sta $2503-$400+$3C00
+
+    ldy #0
+:
+    sta $2522-$400+$3C00+(32*0), y
+    sta $2522-$400+$3C00+(32*1), y
+    sta $2522-$400+$3C00+(32*2), y
+    iny
+    cpy #8
+    bne :-
+
+    ldy #0
+:
+    sta $25A2-$400+$3C00+(32*0), y
+    sta $25A2-$400+$3C00+(32*1), y
+    sta $25A2-$400+$3C00+(32*2), y
+    iny
+    cpy #8
+    bne :-
+
+    ldy #0
+:
+    sta $2582-$400+$3C00, y
+    iny
+    cpy #6
     bne :-
 
     ; write arrow extended Attributes
@@ -2527,6 +2622,19 @@ MenuText:
 MenuPalette:
     .byte $0F, $28, $20, $28
     .byte $0F, $10, $20, $28
+    .byte $0F, $0F, $0F, $0F
+    .byte $0F, $0F, $0F, $0F
+
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $20, $00
+    .byte $0F, $10, $20, $00
+
+;
+; for Round End and Game Over screens
+ScoresPalette:
+    .byte $0F, $28, $20, $28
+    .byte $0F, $10, $20, $20
     .byte $0F, $0F, $0F, $0F
     .byte $0F, $0F, $0F, $0F
 
