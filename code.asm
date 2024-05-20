@@ -645,11 +645,10 @@ ExtAttrStart = $5C00
     lda #100
     sta RoundPerfect
 
-
-Frame:
     lda #IRQStates::ExtAttr
     jsr SetIRQ
 
+Frame:
     clc
     lda Round+0
     adc #1
@@ -990,8 +989,8 @@ NextStrat:
     sbc StratsCompleted
     sta ClearSmallStrat
 
-    lda #IRQStates::ExtAttr
-    jsr SetIRQ
+    ;lda #IRQStates::ExtAttr
+    ;jsr SetIRQ
 
     ; Wait for the extended attributes to get
     ; written  before updating the data.  If we
@@ -1314,7 +1313,7 @@ NextRound:
 
     lda #$25
     sta $2006
-    lda #$80
+    lda #$88
     sta $2006
 
     ldy #0
@@ -1357,6 +1356,20 @@ RoundStart:
     lda #0
     sta TimerAnim
 
+    clc
+    ldx TimerAnim
+    stx $5205 ; multiply on MMC5
+    ldx #25
+    stx $5206
+
+    lda $5205
+    adc #.lobyte(TimerTiles)
+    sta ptrData+0
+
+    lda $5206
+    adc #.hibyte(TimerTiles)
+    sta ptrData+1
+
     jsr WaitForNMI
     lda #$81
     sta $2000
@@ -1377,13 +1390,29 @@ RoundStart:
     sta $2005
     sta $2005
 
-
     lda #.lobyte(nmiGame)
     sta ptrNMI+0
     lda #.hibyte(nmiGame)
     sta ptrNMI+1
 
     jsr WaitForNMI
+
+    lda #$25
+    sta $2006
+    lda #$88
+    sta $2006
+    lda #' '
+    .repeat 17
+    sta $2007
+    .endrepeat
+
+    lda #$80
+    sta $2000
+
+    lda #0
+    sta $2005
+    sta $2005
+
     lda #IRQStates::ExtAttr
     jsr SetIRQ
     jmp Frame
@@ -1969,6 +1998,9 @@ irqTimer:
 
     lda #0
     sta IrqWait
+
+    lda #IRQStates::ExtAttr
+    jsr SetIRQ
     rts
 
 irqMenu:
@@ -2037,6 +2069,52 @@ irqNameScroll:
 ; Write extended attributes for large icon
 ; ie, write CHR bank for large strat
 irqExtAttr:
+    ;
+    ; setup score colors
+    lda #.hibyte($2057+$3C00)
+    sta ptrData+1
+    lda #.lobyte($2057+$3C00)
+    sta ptrData+0
+    lda #%1000_0001
+    ldy #0
+:   sta (ptrData), y
+    iny
+    cpy #5
+    bne :-
+
+    lda #.hibyte($2077+$3C00)
+    sta ptrData+1
+    lda #.lobyte($2077+$3C00)
+    sta ptrData+0
+    lda #%0100_0001
+    ldy #0
+:   sta (ptrData), y
+    iny
+    cpy #5
+    bne :-
+
+    lda #.hibyte($20B7+$3C00)
+    sta ptrData+1
+    lda #.lobyte($20B7+$3C00)
+    sta ptrData+0
+    lda #%1000_0001
+    ldy #0
+:   sta (ptrData), y
+    iny
+    cpy #5
+    bne :-
+
+    lda #.hibyte($20D7+$3C00)
+    sta ptrData+1
+    lda #.lobyte($20D7+$3C00)
+    sta ptrData+0
+    lda #%0100_0001
+    ldy #0
+:   sta (ptrData), y
+    iny
+    cpy #5
+    bne :-
+
     ;
     ; Setup Main strat
     lda #.hibyte(StratStartAddr+$3C00)
@@ -2199,10 +2277,10 @@ irqRoundOver:
     rts
 
 irqRoundOverPressScroll:
-    lda #$80
+    lda #$81
     sta $2000
 
-    lda NameScrollOffsets+17
+    lda #4
     sta $2005
     lda #0
     sta $2005
