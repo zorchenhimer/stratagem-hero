@@ -110,6 +110,9 @@ Score: .res 2
 ScoreBonusTime: .res 1
 ScoreBonusRound: .res 2
 
+RunningScore: .res 5
+RunningRound: .res 5
+
 ; Bin to Dec stuff
 bdInput: .res 2
 bdTmpA: .res 2
@@ -642,9 +645,39 @@ ExtAttrStart = $5C00
     lda #100
     sta RoundPerfect
 
+
 Frame:
     lda #IRQStates::ExtAttr
     jsr SetIRQ
+
+    clc
+    lda Round+0
+    adc #1
+    sta bdInput+0
+
+    lda Round+1
+    adc #0
+    sta bdInput+1
+    jsr BinToDec
+
+    ldy #5
+:   lda bdOutput, y
+    sta RunningRound, y
+    dey
+    bpl :-
+
+    lda Score+0
+    sta bdInput+0
+    lda Score+1
+    sta bdInput+1
+    jsr BinToDec
+
+    ldy #5
+:
+    lda bdOutput, y
+    sta RunningScore, y
+    dey
+    bpl :-
 
     clc
     ldx TimerAnim
@@ -1809,6 +1842,25 @@ nmiGame:
 
     jsr NMI_DrawName
     jsr NMI_DrawTimer
+
+    lda #$20
+    sta $2006
+    lda #$77
+    sta $2006
+    .repeat 5, i
+    lda RunningRound+i
+    sta $2007
+    .endrepeat
+
+    lda #$20
+    sta $2006
+    lda #$D7
+    sta $2006
+    .repeat 5, i
+    lda RunningScore+i
+    sta $2007
+    .endrepeat
+
     ldx ClearSmallStrat
     bne :+
     jmp @done
