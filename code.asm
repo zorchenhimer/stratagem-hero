@@ -648,11 +648,11 @@ Frame:
 
     jsr ReadControllers
 
-    lda #BUTTON_A
-    and Controller_Pressed
-    beq :+
-    jmp NextStrat
-:
+;    lda #BUTTON_A
+;    and Controller_Pressed
+;    beq :+
+;    jmp NextStrat
+;:
 
     ldx PressedCount
     lda StratBuffer, x
