@@ -411,13 +411,36 @@ InitGame:
     lda #0
     sta $2001
     sta ClearSmallStrat
-
-    lda #3
-    sta TimerFrame
-    lda #0
     sta TimerAnim
     sta Score+0
     sta Score+1
+    sta Round
+    sta StratsCompleted
+
+    lda #1
+    sta StratsToMake
+
+    lda #3
+    sta TimerFrame
+
+    lda #60
+    sta AnimCountdown
+
+    lda #100
+    sta RoundPerfect
+
+    lda #' '
+    ldy #4
+:
+    sta RunningRound, y
+    sta RunningScore, y
+    dey
+    bpl :-
+
+    lda #'1'
+    sta RunningRound+4
+    lda #'0'
+    sta RunningScore+4
 
     lda #.lobyte(nmiGame)
     sta ptrNMI+0
@@ -555,15 +578,6 @@ ExtAttrStart = $5C00
     ; turn off sprites
     lda #%0000_1110
     sta $2001
-
-    lda #60
-    sta AnimCountdown
-
-    lda #100
-    sta RoundPerfect
-
-    lda #1
-    sta StratsToMake
 
     lda #IRQStates::ExtAttr
     jsr SetIRQ
@@ -1041,10 +1055,7 @@ NextRound:
 
     lda #0
     sta StratsCompleted
-
-    lda #0
-    sta ScoreBonusTime+0
-    sta ScoreBonusTime+1
+    sta ScoreBonusTime
     sta ScoreBonusRound+0
     sta ScoreBonusRound+1
 
@@ -1328,20 +1339,6 @@ RoundStart:
     sta TimerAnim
     sta ClearSmallStrat
 
-    clc
-    ldx TimerAnim
-    stx $5205 ; multiply on MMC5
-    ldx #25
-    stx $5206
-
-    lda $5205
-    adc #.lobyte(TimerTiles)
-    sta ptrData+0
-
-    lda $5206
-    adc #.hibyte(TimerTiles)
-    sta ptrData+1
-
     jsr WaitForNMI
     lda #$81
     sta $2000
@@ -1369,6 +1366,7 @@ RoundStart:
 
     jsr WaitForNMI
 
+    ; clear out "press the any key" text
     lda #$25
     sta $2006
     lda #$88
