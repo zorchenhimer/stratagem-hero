@@ -1,8 +1,5 @@
 ; asmsyntax=ca65
 
-; TODO:
-;   - Add scoring
-;
 ; Scoring:
 ;   - 5pt per arrow
 ;   - 100pt for perfect round
@@ -170,17 +167,6 @@ ArrowAttrOffsets:
     .byte 4, 0
     .byte 4, 5
     .byte 5, 0
-
-;ArrowAttrOffsets:
-;    .byte 1, 0
-;    .byte 2, 0
-;    .byte 2, 3
-;    .byte 3, 0
-;
-;    .byte 4, 0
-;    .byte 5, 0
-;    .byte 5, 6
-;    .byte 6, 0
 
 ArrowAttrMasks:
     ; BR, BL, TR, TL
@@ -385,78 +371,6 @@ SetIRQ:
     cli
     rts
 
-DrawSmall_16:
-    lda #$21
-    sta $2006
-    lda #$8C
-    sta $2006
-
-    ldy #$EC
-.repeat 2
-    sty $2007
-    iny
-.endrepeat
-
-    lda #$21
-    sta $2006
-    lda #$AC
-    sta $2006
-
-.repeat 2
-    sty $2007
-    iny
-.endrepeat
-    rts
-
-DrawSmall_24:
-    lda ptrPpuAddress+1
-    sta $2006
-    lda ptrPpuAddress+0
-    sta $2006
-
-    ldy #$80
-.repeat 3
-    sty $2007
-    iny
-.endrepeat
-
-    clc
-    lda ptrPpuAddress+0
-    adc #32
-    sta ptrPpuAddress+0
-    bcc :+
-    inc ptrPpuAddress+1
-:
-
-    lda ptrPpuAddress+1
-    sta $2006
-    lda ptrPpuAddress+0
-    sta $2006
-
-.repeat 3
-    sty $2007
-    iny
-.endrepeat
-
-    clc
-    lda ptrPpuAddress+0
-    adc #32
-    sta ptrPpuAddress+0
-    bcc :+
-    inc ptrPpuAddress+1
-:
-
-    lda ptrPpuAddress+1
-    sta $2006
-    lda ptrPpuAddress+0
-    sta $2006
-
-.repeat 3
-    sty $2007
-    iny
-.endrepeat
-    rts
-
 DrawSmall_32:
     lda ptrPpuAddress+1
     sta $2006
@@ -502,6 +416,8 @@ InitGame:
     sta TimerFrame
     lda #0
     sta TimerAnim
+    sta Score+0
+    sta Score+1
 
     lda #.lobyte(nmiGame)
     sta ptrNMI+0
@@ -599,7 +515,7 @@ ExtAttrStart = $5C00
     jsr DrawIconExt
 
     lda rng
-    and #$3F
+    ;and #$3F
     tax
     ldy #0
 :
@@ -986,6 +902,7 @@ GameOver:
     cpy #6
     bne :-
 
+    jsr WaitForNMI
     lda #%0000_1100
     sta $2001
 
@@ -1034,7 +951,7 @@ NextStrat:
     dec StratsToMake
 
     lda rng
-    and #$3F
+    ;and #$3F
     tay
     lda StratRngTable, y
     sta StratsCurrent+5
@@ -1045,7 +962,7 @@ NextStrat:
     sta StratsCurrent+5
 
     lda rng
-    and #$3F
+    ;and #$3F
     tay
     lda StratRngTable, y
     ldx StratsCompleted
@@ -1409,6 +1326,7 @@ RoundStart:
     sta TimerFrame
     lda #0
     sta TimerAnim
+    sta ClearSmallStrat
 
     clc
     ldx TimerAnim
@@ -2735,7 +2653,6 @@ MenuFrame:
     bne :-
 
     jmp InitGame
-
 
 @nope:
     jsr WaitForNMI

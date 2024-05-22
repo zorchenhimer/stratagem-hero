@@ -8,15 +8,26 @@ import (
 )
 
 func main() {
-	nums := make([]string, 64)
-	for i := 0; i < len(nums)-1; i++ {
-		nums[i] = strconv.Itoa(i)
+	nums := []string{}
+	for i := 0; i < 63; i++ {
+		str := strconv.Itoa(i)
+		nums = append(nums, str)
+		nums = append(nums, str)
+		nums = append(nums, str)
+		nums = append(nums, str)
 	}
-	nums[63] = "58"
 
-	rand.Shuffle(len(nums), func(i, j int) {
-		nums[i], nums[j] = nums[j], nums[i]
-	})
+	// Extra hellbombs :D
+	nums = append(nums, "58")
+	nums = append(nums, "58")
+	nums = append(nums, "58")
+	nums = append(nums, "58")
+
+	for x := 0; x < 2; x++ {
+		rand.Shuffle(len(nums), func(i, j int) {
+			nums[i], nums[j] = nums[j], nums[i]
+		})
+	}
 
 	fmt.Println(".byte " + strings.Join(nums, ", "))
 }
