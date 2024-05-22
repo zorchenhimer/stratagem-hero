@@ -128,6 +128,7 @@ ArrowBufferB: .res 8
 ;ArrowBufferC: .res 23
 
 TimerBuffer: .res 25
+StratsToMake: .res 1
 
 .segment "PAGE00"
 
@@ -645,6 +646,9 @@ ExtAttrStart = $5C00
     lda #100
     sta RoundPerfect
 
+    lda #1
+    sta StratsToMake
+
     lda #IRQStates::ExtAttr
     jsr SetIRQ
 
@@ -1017,6 +1021,29 @@ NextStrat:
     adc Score+1
     sta Score+1
 
+    ldy #0
+:
+    lda StratsCurrent+1, y
+    sta StratsCurrent, y
+    iny
+    cpy #5
+    bne :-
+
+    lda StratsToMake
+    beq @nomore
+    dec StratsToMake
+
+    lda rng
+    and #$3F
+    tay
+    lda StratRngTable, y
+    sta StratsCurrent+5
+    jmp @nextFrame
+@nomore:
+
+    lda #$FF
+    sta StratsCurrent+5
+
     lda rng
     and #$3F
     tay
@@ -1029,32 +1056,19 @@ NextStrat:
     sbc StratsCompleted
     sta ClearSmallStrat
 
-    ;lda #IRQStates::ExtAttr
-    ;jsr SetIRQ
-
-    ; Wait for the extended attributes to get
-    ; written  before updating the data.  If we
-    ; don't wait we get a single frame of an icon
-    ; that is either duplicated, or glitched out.
-    jsr WaitForIRQ
-
-    ldy #0
-:
-    lda StratsCurrent+1, y
-    sta StratsCurrent, y
-    iny
-    cpy #5
-    bne :-
-
-    lda #$FF
-    sta StratsCurrent+5
-
     inc StratsCompleted
     lda StratsCompleted
     cmp #6
     bne :+
     jmp NextRound
 :
+
+    ; Wait for the extended attributes to get
+    ; written  before updating the data.  If we
+    ; don't wait we get a single frame of an icon
+    ; that is either duplicated, or glitched out.
+@nextFrame:
+    jsr WaitForIRQ
 
     lda StratsCurrent+0
     jsr LoadStrat
@@ -1452,6 +1466,10 @@ RoundStart:
     lda #0
     sta $2005
     sta $2005
+
+    ldx Round
+    inx
+    stx StratsToMake
 
     lda #IRQStates::ExtAttr
     jsr SetIRQ
